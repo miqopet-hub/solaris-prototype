@@ -51,7 +51,7 @@
 </style>
 </head>
 <body>
-<div class="hint">Rear camera locked to 1× when possible · Drag dial = rotate · Tap = enter/commit</div>
+<div class="hint">Drag dial = rotate · Tap = enter/commit · Long press = back/reset</div>
 <main class="app"><canvas id="screen" width="900" height="900"></canvas><video id="video" autoplay playsinline muted></video></main>
 <div class="toolbar">
 <label>Upload photo<input id="fileInput" type="file" accept="image/*"></label>
@@ -165,63 +165,36 @@ function effectTexture(base){let grain=pv('TEXTURE','GRAIN'),cn=pv('TEXTURE','CO
 function effectInvert(base){let mix=pv('INVERT','MIX'),curve=pv('INVERT','CURVE');if(mix<=0)return base;let mx=mix/100,gamma=2.5-curve/100*2,c=document.createElement('canvas');c.width=c.height=imageDiameter;let cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(base,0,0);let img=cx.getImageData(0,0,imageDiameter,imageDiameter),d=img.data;for(let i=0;i<d.length;i+=4){let lum=(d[i]*.299+d[i+1]*.587+d[i+2]*.114)/255,cm=clamp(Math.pow(lum,gamma)*mx*1.5,0,1);d[i]=d[i]*(1-cm)+(255-d[i])*cm;d[i+1]=d[i+1]*(1-cm)+(255-d[i+1])*cm;d[i+2]=d[i+2]*(1-cm)+(255-d[i+2])*cm}cx.putImageData(img,0,0);return c}
 function textCenter(t,x,y,s,w='normal',col='#fff3cf',a=1){ctx.save();ctx.globalAlpha=a;ctx.fillStyle=col;ctx.font=`${w} ${s}px Arial,Helvetica,sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.shadowColor='rgba(0,0,0,.95)';ctx.shadowBlur=12;ctx.shadowOffsetY=2;ctx.fillText(t,x,y);ctx.restore()}
 function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
-
-function circularDelta(target,current,count){
-  let d=target-current;
-  while(d>count/2)d-=count;
-  while(d<-count/2)d+=count;
-  return d;
-}
-
-function smoothDialTargets(){
-  if(uiMode===0){
-    let n=processes.length;
-    dialDisplayProcessIndex += circularDelta(processIndex,dialDisplayProcessIndex,n)*0.22;
-  }else{
-    let n=cp().params.length || 1;
-    dialDisplayParamIndex += circularDelta(paramIndex,dialDisplayParamIndex,n)*0.22;
-  }
-}
-
 function drawDialLabels(){
-  smoothDialTargets();
-
-  let list = uiMode===0 ? processes.map(p=>p.name) : cp().params.map(p=>p.name);
-  let selectedIndex = uiMode===0 ? processIndex : paramIndex;
-  let displayIndex = uiMode===0 ? dialDisplayProcessIndex : dialDisplayParamIndex;
-  let n = list.length || 1;
+  let list=uiMode===0?processes.map(p=>p.name):cp().params.map(p=>p.name);
+  let sel=uiMode===0?processIndex:paramIndex;
+  let n=list.length || 1;
 
   for(let i=0;i<n;i++){
-    let rel = i - displayIndex;
+    let rel=i-sel;
     if(rel>n/2)rel-=n;
     if(rel<-n/2)rel+=n;
 
     let dist=Math.abs(rel);
-    if(dist>4.2)continue;
+    if(dist>4)continue;
 
-    let a=(-90 + rel*30) * Math.PI/180;
-    let r=276;
+    // Higher text arc.
+    let a=(-90+rel*30)*Math.PI/180;
+    let r=272;
     let x=C+Math.cos(a)*r;
-    let y=C+Math.sin(a)*r-38;
+    let y=C+Math.sin(a)*r-34;
 
-    let selected = i===selectedIndex;
-    let size = selected ? 27 : Math.max(12, 18 - dist*1.4);
-    let alpha = selected ? 1 : clamp(.52 - dist*.11, .12, .50);
-    let color = selected ? '#f0b64f' : '#f5ead0';
+    let selected=i===sel;
+    let size=selected?27:Math.max(12,18-dist*1.25);
+    let alpha=selected?1:clamp(.52-dist*.10,.14,.50);
+    let color=selected?'#f0b64f':'#f5ead0';
 
     ctx.save();
     if(!selected){
-      ctx.filter='blur('+(0.35 + dist*0.55)+'px)';
+      ctx.filter='blur('+(0.30+dist*0.48)+'px)';
     }
     textCenter(list[i],x,y,size,'bold',color,alpha);
     ctx.restore();
-  }
-
-  let diff = uiMode===0
-    ? Math.abs(circularDelta(processIndex,dialDisplayProcessIndex,processes.length))
-    : Math.abs(circularDelta(paramIndex,dialDisplayParamIndex,cp().params.length || 1));
-  if(diff>.01 && !(liveMode && !frozen)){
-    requestAnimationFrame(drawFrame);
   }
 }
 function drawFrame(){if(liveMode&&!frozen)updateLiveSource();ctx.clearRect(0,0,W,H);let bg=ctx.createRadialGradient(C,C,180,C,C,410);bg.addColorStop(0,'#2a2117');bg.addColorStop(.65,'#8b632b');bg.addColorStop(1,'#c2954c');ctx.fillStyle=bg;ctx.beginPath();ctx.arc(C,C,375,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#e0be73';ctx.lineWidth=5;ctx.stroke();for(let i=0;i<72;i++){let a=(i*5-90)*Math.PI/180,long=i%6===0,r1=long?284:298,r2=327;ctx.strokeStyle=long?'#2a1d10':'#4a351c';ctx.lineWidth=long?4:1.5;ctx.beginPath();ctx.moveTo(C+Math.cos(a)*r1,C+Math.sin(a)*r1);ctx.lineTo(C+Math.cos(a)*r2,C+Math.sin(a)*r2);ctx.stroke()}drawDialLabels();let img=processImage();ctx.save();ctx.beginPath();ctx.arc(C,C,imageDiameter/2,0,Math.PI*2);ctx.clip();ctx.drawImage(img,C-imageDiameter/2,C-imageDiameter/2);let edge=ctx.createRadialGradient(C,C,imageDiameter*.35,C,C,imageDiameter*.52);edge.addColorStop(0,'rgba(0,0,0,0)');edge.addColorStop(1,'rgba(0,0,0,.13)');ctx.fillStyle=edge;ctx.fillRect(C-imageDiameter/2,C-imageDiameter/2,imageDiameter,imageDiameter);ctx.restore();ctx.strokeStyle='rgba(255,236,185,.48)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(C,C,imageDiameter/2,0,Math.PI*2);ctx.stroke();let now=performance.now();if(now<overlayUntil){let a=clamp((overlayUntil-now)/350,0,1),proc=cp(),par=cpar();ctx.save();ctx.globalAlpha=a;rr(C-115,C+imageDiameter/2-110,230,84,24);ctx.fillStyle='rgba(12,10,7,.58)';ctx.fill();ctx.restore();let top='PROCESS',main=proc.name,sub='';if(uiMode===1){top='PARAMETER';main=par.name;sub=proc.name}if(uiMode===2){top=par.name;main=String(Math.round(par.value));sub=proc.name}textCenter(top,C,C+imageDiameter/2-92,13,'normal','#f7e8ba',a);textCenter(main,C,C+imageDiameter/2-64,26,'bold','#fff6d7',a);if(sub)textCenter(sub,C,C+imageDiameter/2-38,13,'normal','#f7e8ba',a)}ctx.save();ctx.fillStyle='#b98c43';ctx.strokeStyle='#efcd86';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(C,42);ctx.lineTo(C-36,138);ctx.lineTo(C+36,138);ctx.closePath();ctx.fill();ctx.stroke();textCenter('A',C,105,38,'bold','#19120c');ctx.restore();if(liveMode&&!frozen)requestAnimationFrame(drawFrame);else if(now<overlayUntil)requestAnimationFrame(drawFrame)}
@@ -376,27 +349,7 @@ canvas.addEventListener('wheel',e=>{e.preventDefault();let now=performance.now()
     holdTimer=setTimeout(()=>{suppressClick=true;resetCurrentParameter()},520);
   }
 });
-window.addEventListener('mouseup',()=>{stopMutation()});canvas.addEventListener('click',e=>{if(suppressClick){suppressClick=false;return}let r=canvas.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*W,y=(e.clientY-r.top)/r.height*H;if(Math.hypot(x-C,y-C)<imageDiameter/2)centerPress()});document.getElementById('modeBtn').onclick=centerPress;document.getElementById('mutateBtn').onclick=mutateRecipe;document.getElementById('backBtn').onclick=backToEffects;document.getElementById('resetBtn').onclick=()=>{let p=cpar();p.value=p.def;showOverlay(1000);drawFrame()};document.getElementById('saveBtn').onclick=()=>{let im=processImage(),out=document.createElement('canvas');out.width=out.height=imageDiameter;let ox=out.getContext('2d');ox.save();ox.beginPath();ox.arc(imageDiameter/2,imageDiameter/2,imageDiameter/2,0,Math.PI*2);ox.clip();ox.drawImage(im,0,0);ox.restore();let link=document.createElement('a');link.download=`solaris_${cp().name.toLowerCase()}.png`;link.href=out.toDataURL('image/png');link.click()};document.getElementById('captureBtn').onclick=()=>{if(liveMode){updateLiveSource();frozen=!frozen;document.getElementById('captureBtn').textContent=frozen?'Resume Live':'Freeze Frame';showOverlay(900);drawFrame()}};document.getElementById('cameraBtn').onclick=async()=>{try{if(!liveMode){liveStream=await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { exact: "environment" },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          aspectRatio: { ideal: 1.7777778 },
-          advanced: [
-            { zoom: 1 },
-            { focusMode: "continuous" }
-          ]
-        },
-        audio: false
-      });video.srcObject=liveStream;
-      try {
-        const track = liveStream.getVideoTracks()[0];
-        const caps = track.getCapabilities ? track.getCapabilities() : {};
-        const constraints = { advanced: [] };
-        if (caps.zoom) constraints.advanced.push({ zoom: Math.max(caps.zoom.min || 1, 1) });
-        if (caps.focusMode && caps.focusMode.includes("continuous")) constraints.advanced.push({ focusMode: "continuous" });
-        if (constraints.advanced.length) track.applyConstraints(constraints).catch(()=>{});
-      } catch(e) {}liveMode=true;frozen=false;document.getElementById('cameraBtn').textContent='Stop Webcam';document.getElementById('captureBtn').textContent='Freeze Frame';showOverlay(1100);drawFrame()}else{liveStream?.getTracks().forEach(t=>t.stop());liveStream=null;liveMode=false;frozen=false;document.getElementById('cameraBtn').textContent='Start Webcam';document.getElementById('captureBtn').textContent='Freeze Frame';showOverlay(900);drawFrame()}}catch(err){alert('Camera access failed. Try Chrome/Firefox, or run from localhost if your browser blocks webcam access on local files.')}};fileInput.addEventListener('change',()=>{let file=fileInput.files[0];if(!file)return;if(liveMode){liveStream?.getTracks().forEach(t=>t.stop());liveStream=null;liveMode=false;frozen=false;document.getElementById('cameraBtn').textContent='Start Webcam';document.getElementById('captureBtn').textContent='Freeze Frame'}let img=new Image();img.onload=()=>{sourceCanvas.width=img.width;sourceCanvas.height=img.height;sourceCtx.drawImage(img,0,0);showOverlay(900);drawFrame()};img.src=URL.createObjectURL(file)});document.addEventListener('keydown',e=>{if(e.key===' '){e.preventDefault();centerPress()}if(e.key==='Escape'||e.key==='Backspace'){e.preventDefault();backToEffects()}if(e.key.toLowerCase()==='o')fileInput.click();if(e.key.toLowerCase()==='r'){resetCurrentParameter()}if(e.key.toLowerCase()==='s')document.getElementById('saveBtn').click();if(e.key.toLowerCase()==='m')mutateRecipe()});createDefaultImage();showOverlay(900);drawFrame();
+window.addEventListener('mouseup',()=>{stopMutation()});canvas.addEventListener('click',e=>{if(suppressClick){suppressClick=false;return}let r=canvas.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*W,y=(e.clientY-r.top)/r.height*H;if(Math.hypot(x-C,y-C)<imageDiameter/2)centerPress()});document.getElementById('modeBtn').onclick=centerPress;document.getElementById('mutateBtn').onclick=mutateRecipe;document.getElementById('backBtn').onclick=backToEffects;document.getElementById('resetBtn').onclick=()=>{let p=cpar();p.value=p.def;showOverlay(1000);drawFrame()};document.getElementById('saveBtn').onclick=()=>{let im=processImage(),out=document.createElement('canvas');out.width=out.height=imageDiameter;let ox=out.getContext('2d');ox.save();ox.beginPath();ox.arc(imageDiameter/2,imageDiameter/2,imageDiameter/2,0,Math.PI*2);ox.clip();ox.drawImage(im,0,0);ox.restore();let link=document.createElement('a');link.download=`solaris_${cp().name.toLowerCase()}.png`;link.href=out.toDataURL('image/png');link.click()};document.getElementById('captureBtn').onclick=()=>{if(liveMode){updateLiveSource();frozen=!frozen;document.getElementById('captureBtn').textContent=frozen?'Resume Live':'Freeze Frame';showOverlay(900);drawFrame()}};document.getElementById('cameraBtn').onclick=async()=>{try{if(!liveMode){liveStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720},facingMode:'environment'},audio:false});video.srcObject=liveStream;liveMode=true;frozen=false;document.getElementById('cameraBtn').textContent='Stop Webcam';document.getElementById('captureBtn').textContent='Freeze Frame';showOverlay(1100);drawFrame()}else{liveStream?.getTracks().forEach(t=>t.stop());liveStream=null;liveMode=false;frozen=false;document.getElementById('cameraBtn').textContent='Start Webcam';document.getElementById('captureBtn').textContent='Freeze Frame';showOverlay(900);drawFrame()}}catch(err){alert('Camera access failed. Try Chrome/Firefox, or run from localhost if your browser blocks webcam access on local files.')}};fileInput.addEventListener('change',()=>{let file=fileInput.files[0];if(!file)return;if(liveMode){liveStream?.getTracks().forEach(t=>t.stop());liveStream=null;liveMode=false;frozen=false;document.getElementById('cameraBtn').textContent='Start Webcam';document.getElementById('captureBtn').textContent='Freeze Frame'}let img=new Image();img.onload=()=>{sourceCanvas.width=img.width;sourceCanvas.height=img.height;sourceCtx.drawImage(img,0,0);showOverlay(900);drawFrame()};img.src=URL.createObjectURL(file)});document.addEventListener('keydown',e=>{if(e.key===' '){e.preventDefault();centerPress()}if(e.key==='Escape'||e.key==='Backspace'){e.preventDefault();backToEffects()}if(e.key.toLowerCase()==='o')fileInput.click();if(e.key.toLowerCase()==='r'){resetCurrentParameter()}if(e.key.toLowerCase()==='s')document.getElementById('saveBtn').click();if(e.key.toLowerCase()==='m')mutateRecipe()});createDefaultImage();showOverlay(900);drawFrame();
 </script>
 </body>
 </html>
