@@ -40,14 +40,12 @@
   }
 
 
-  html, body, canvas, .app, .toolbar, button, label {
+  html, body, canvas, .app {
     -webkit-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
-  }
-  body {
-    overscroll-behavior: none;
+    touch-action: none;
   }
 
 </style>
@@ -121,7 +119,7 @@ function drawFrame(){if(liveMode&&!frozen)updateLiveSource();ctx.clearRect(0,0,W
     if(uiMode===1){top=proc.name;main=par.name;sub='PARAMETER'}
     if(uiMode===2){top=proc.name+' / '+par.name;main=String(Math.round(par.value));sub='VALUE'}textCenter(top,C,C+imageDiameter/2-92,13,'normal','#f7e8ba',a);textCenter(main,C,C+imageDiameter/2-64,26,'bold','#fff6d7',a);if(sub)textCenter(sub,C,C+imageDiameter/2-38,13,'normal','#f7e8ba',a)}ctx.save();ctx.fillStyle='#b98c43';ctx.strokeStyle='#efcd86';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(C,42);ctx.lineTo(C-36,138);ctx.lineTo(C+36,138);ctx.closePath();ctx.fill();ctx.stroke();textCenter('A',C,105,38,'bold','#19120c');ctx.restore();if(liveMode&&!frozen)requestAnimationFrame(drawFrame);else if(now<overlayUntil)requestAnimationFrame(drawFrame)}
 function rotateDial(direction,step){if(uiMode===0){processIndex=(processIndex-direction+processes.length)%processes.length;paramIndex=0}else if(uiMode===1){let ps=cp().params;paramIndex=(paramIndex-direction+ps.length)%ps.length}else{cp().active=true;let par=cpar(),st=par.max===10?1:step;par.value=clamp(par.value+direction*st,par.min,par.max)}showOverlay();drawFrame()}
-function centerPress(){haptic('commit');
+function centerPress(){
   if(uiMode===0){
     if(cp().random){
       mutateRecipe();
@@ -145,7 +143,7 @@ function backToEffects(){
   drawFrame();
 }
 
-function resetCurrentParameter(){haptic('reset');
+function resetCurrentParameter(){
   if(uiMode===2){
     let par=currentParam();
     par.value=par.def;
@@ -158,7 +156,7 @@ function resetCurrentParameter(){haptic('reset');
   }
 }
 
-function resetAllParameters(){haptic('reset');
+function resetAllParameters(){
   processes.forEach(p=>{
     p.active=false;
     if(p.params){
@@ -172,7 +170,7 @@ function resetAllParameters(){haptic('reset');
   drawFrame();
 }
 
-function mutateRecipe(){haptic('mutate');
+function mutateRecipe(){
   // RANDOM mutates the full recipe, not only the selected effect.
   let real=processes.filter(p=>!p.random);
   let changes=2+Math.floor(Math.random()*4);
@@ -283,5 +281,12 @@ canvas.addEventListener('wheel',e=>{e.preventDefault();let now=performance.now()
 });
 window.addEventListener('mouseup',()=>{stopMutation()});canvas.addEventListener('click',e=>{if(suppressClick){suppressClick=false;return}let r=canvas.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*W,y=(e.clientY-r.top)/r.height*H;if(Math.hypot(x-C,y-C)<imageDiameter/2)centerPress()});document.getElementById('modeBtn').onclick=centerPress;document.getElementById('mutateBtn').onclick=mutateRecipe;document.getElementById('backBtn').onclick=backToEffects;document.getElementById('resetBtn').onclick=()=>{let p=cpar();p.value=p.def;showOverlay(1000);drawFrame()};document.getElementById('saveBtn').onclick=()=>{let im=processImage(),out=document.createElement('canvas');out.width=out.height=imageDiameter;let ox=out.getContext('2d');ox.save();ox.beginPath();ox.arc(imageDiameter/2,imageDiameter/2,imageDiameter/2,0,Math.PI*2);ox.clip();ox.drawImage(im,0,0);ox.restore();let link=document.createElement('a');link.download=`solaris_${cp().name.toLowerCase()}.png`;link.href=out.toDataURL('image/png');link.click()};document.getElementById('captureBtn').onclick=()=>{if(liveMode){updateLiveSource();frozen=!frozen;document.getElementById('captureBtn').textContent=frozen?'Resume Live':'Freeze Frame';showOverlay(900);drawFrame()}};document.getElementById('cameraBtn').onclick=async()=>{try{if(!liveMode){liveStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720},facingMode:'environment'},audio:false});video.srcObject=liveStream;liveMode=true;frozen=false;document.getElementById('cameraBtn').textContent='Stop Webcam';document.getElementById('captureBtn').textContent='Freeze Frame';showOverlay(1100);drawFrame()}else{liveStream?.getTracks().forEach(t=>t.stop());liveStream=null;liveMode=false;frozen=false;document.getElementById('cameraBtn').textContent='Start Webcam';document.getElementById('captureBtn').textContent='Freeze Frame';showOverlay(900);drawFrame()}}catch(err){alert('Camera access failed. Try Chrome/Firefox, or run from localhost if your browser blocks webcam access on local files.')}};fileInput.addEventListener('change',()=>{let file=fileInput.files[0];if(!file)return;if(liveMode){liveStream?.getTracks().forEach(t=>t.stop());liveStream=null;liveMode=false;frozen=false;document.getElementById('cameraBtn').textContent='Start Webcam';document.getElementById('captureBtn').textContent='Freeze Frame'}let img=new Image();img.onload=()=>{sourceCanvas.width=img.width;sourceCanvas.height=img.height;sourceCtx.drawImage(img,0,0);showOverlay(900);drawFrame()};img.src=URL.createObjectURL(file)});document.addEventListener('keydown',e=>{if(e.key===' '){e.preventDefault();centerPress()}if(e.key==='Escape'||e.key==='Backspace'){e.preventDefault();backToEffects()}if(e.key.toLowerCase()==='o')fileInput.click();if(e.key.toLowerCase()==='r'){resetCurrentParameter()}if(e.key.toLowerCase()==='s')document.getElementById('saveBtn').click();if(e.key.toLowerCase()==='m')mutateRecipe()});createDefaultImage();showOverlay(900);drawFrame();
 </script>
+
+<script>
+document.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+document.addEventListener('selectstart', function(e){ e.preventDefault(); });
+document.addEventListener('dragstart', function(e){ e.preventDefault(); });
+</script>
+
 </body>
 </html>
