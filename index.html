@@ -51,7 +51,7 @@
 </style>
 </head>
 <body>
-<div class="hint">Drag dial = rotate · Tap = enter/commit · Long press = back/reset · RANDOM = mutate</div>
+<div class="hint">Drag dial = rotate · Tap RANDOM = mutate · Long press = back/reset</div>
 <main class="app"><canvas id="screen" width="900" height="900"></canvas><video id="video" autoplay playsinline muted></video></main>
 <div class="toolbar">
 <label>Upload photo<input id="fileInput" type="file" accept="image/*"></label>
@@ -61,6 +61,7 @@
 const canvas=document.getElementById('screen'),ctx=canvas.getContext('2d',{willReadFrequently:true}),fileInput=document.getElementById('fileInput'),video=document.getElementById('video');
 const W=900,H=900,C=450,imageDiameter=500;let sourceCanvas=document.createElement('canvas'),sourceCtx=sourceCanvas.getContext('2d',{willReadFrequently:true});let liveMode=false,liveStream=null,frozen=false;
 const processes=[
+{name:'RANDOM',random:true,active:false,params:[]},
 {name:'DITHER',active:false,params:[{name:'AMOUNT',value:50,def:50,min:0,max:100},{name:'COLOR',value:0,def:0,min:0,max:10},{name:'DIFFUSE',value:50,def:50,min:0,max:100}]},
 {name:'HALFTONE',active:false,params:[{name:'SIZE',value:50,def:50,min:0,max:100},{name:'PLATES',value:0,def:0,min:0,max:10},{name:'ANGLE',value:50,def:50,min:0,max:100}]},
 {name:'POSTERIZE',active:false,params:[{name:'LEVELS',value:50,def:50,min:0,max:100},{name:'PALETTE',value:0,def:0,min:0,max:100},{name:'EDGE',value:0,def:0,min:0,max:100}]},
@@ -69,10 +70,12 @@ const processes=[
 {name:'TEXTURE',active:false,params:[{name:'GRAIN',value:50,def:50,min:0,max:100},{name:'COLOR NOISE',value:50,def:50,min:0,max:100}]},
 {name:'INVERT',active:false,params:[{name:'MIX',value:50,def:50,min:0,max:100},{name:'CURVE',value:50,def:50,min:0,max:100}]}
 ];
-let processIndex=0,paramIndex=0,uiMode=0,lastDrag dial = rotate · Tap = enter/commit · Long press = back/reset · RANDOM = mutate<=960;x+=60){let y=base+Math.sin(x*.015+phase)*55+Math.sin(x*.041)*25;sourceCtx.lineTo(x,y)}sourceCtx.lineTo(900,900);sourceCtx.closePath();sourceCtx.fillStyle=color;sourceCtx.fill()}m(440,'#65604e',.2);m(560,'#444b3d',1.5);m(690,'#252d25',2.4);sourceCtx.fillStyle='rgba(255,240,180,.8)';sourceCtx.beginPath();sourceCtx.arc(650,250,55,0,Math.PI*2);sourceCtx.fill()}
-function updateLiveSource(){if(!liveMode||frozen||video.readyState<2)return;sourceCanvas.width=video.videoWidth||900;sourceCanvas.height=video.videoHeight||900;sourceCtx.drawImage(video,0,0,sourceCanvas.width,sourceCanvas.height);sourceCtx.restore()}
+let processIndex=0,paramIndex=0,uiMode=0,lastWheelTime=0,overlayUntil=0,grainSeed=12345,noiseSeed=67890,mutateTimer=null,holdTimer=null,suppressClick=false;
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}function cp(){return processes[processIndex]}function cpar(){return cp().params[paramIndex]}function pv(p,n){let pr=processes.find(x=>x.name===p);let pa=pr&&pr.params.find(x=>x.name===n);return pa?pa.value:0}function rnd(s){s.value=(s.value*16807)%2147483647;return(s.value-1)/2147483646}function showOverlay(ms=950){overlayUntil=performance.now()+ms}
+function createDefaultImage(){sourceCanvas.width=900;sourceCanvas.height=900;let g=sourceCtx.createLinearGradient(0,0,0,900);g.addColorStop(0,'#d9c9a3');g.addColorStop(.45,'#8c8165');g.addColorStop(1,'#28342d');sourceCtx.fillStyle=g;sourceCtx.fillRect(0,0,900,900);function m(base,color,phase){sourceCtx.beginPath();sourceCtx.moveTo(0,900);for(let x=0;x<=960;x+=60){let y=base+Math.sin(x*.015+phase)*55+Math.sin(x*.041)*25;sourceCtx.lineTo(x,y)}sourceCtx.lineTo(900,900);sourceCtx.closePath();sourceCtx.fillStyle=color;sourceCtx.fill()}m(440,'#65604e',.2);m(560,'#444b3d',1.5);m(690,'#252d25',2.4);sourceCtx.fillStyle='rgba(255,240,180,.8)';sourceCtx.beginPath();sourceCtx.arc(650,250,55,0,Math.PI*2);sourceCtx.fill()}
+function updateLiveSource(){if(!liveMode||frozen||video.readyState<2)return;sourceCanvas.width=video.videoWidth||900;sourceCanvas.height=video.videoHeight||900;sourceCtx.drawImage(video,0,0,sourceCanvas.width,sourceCanvas.height)}
 function fitSource(){updateLiveSource();let t=document.createElement('canvas');t.width=t.height=imageDiameter;let tc=t.getContext('2d',{willReadFrequently:true});let sw=sourceCanvas.width,sh=sourceCanvas.height,side=Math.min(sw,sh),sx=(sw-side)/2,sy=(sh-side)/2;tc.drawImage(sourceCanvas,sx,sy,side,side,0,0,imageDiameter,imageDiameter);return t}
-function applyProcess(img,n){if(n==='DITHER')return effectDither(img);if(n==='HALFTONE')return effectHalftone(img);if(n==='POSTERIZE')return effectPosterize(img);if(n==='RGB')return effectRGB(img);if(n==='CRT')return effectCRT(img);if(n==='TEXTURE')return effectTexture(img);if(n==='INVERT')return effectInvert(img);return img}function processImage(){let img=fitSource(),any=false;for(let i=0;i<processes.length;i++){if(processes[i].random)continue;if(processes[i].random)continue;if(processes[i].active||(i===processIndex&&uiMode>0)){any=true;img=applyProcess(img,processes[i].name)}}return img}
+function applyProcess(img,n){if(n==='DITHER')return effectDither(img);if(n==='HALFTONE')return effectHalftone(img);if(n==='POSTERIZE')return effectPosterize(img);if(n==='RGB')return effectRGB(img);if(n==='CRT')return effectCRT(img);if(n==='TEXTURE')return effectTexture(img);if(n==='INVERT')return effectInvert(img);return img}function processImage(){let img=fitSource(),any=false;for(let i=0;i<processes.length;i++){if(processes[i].random)continue;if(processes[i].active||(i===processIndex&&uiMode>0)){any=true;img=applyProcess(img,processes[i].name)}}return img}
 function applyColorSteps(img,steps){if(steps<=0)return img;let c=document.createElement('canvas');c.width=c.height=imageDiameter;let cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(img,0,0);let id=cx.getImageData(0,0,imageDiameter,imageDiameter),d=id.data,levels=Math.max(2,steps+1);for(let i=0;i<d.length;i+=4){d[i]=Math.round(d[i]/255*(levels-1))*(255/(levels-1));d[i+1]=Math.round(d[i+1]/255*(levels-1))*(255/(levels-1));d[i+2]=Math.round(d[i+2]/255*(levels-1))*(255/(levels-1))}cx.putImageData(id,0,0);return c}
 function effectDither(base){let amount=pv('DITHER','AMOUNT'),steps=Math.round(pv('DITHER','COLOR')),diff=pv('DITHER','DIFFUSE');if(amount<=0)return applyColorSteps(base,steps);let small=document.createElement('canvas');small.width=small.height=128;let sx=small.getContext('2d',{willReadFrequently:true});sx.drawImage(base,0,0,128,128);let img=sx.getImageData(0,0,128,128),d=img.data,str=amount/100*diff/100;if(steps>0){let levels=Math.max(2,steps+1),arr=new Float32Array(d.length);for(let i=0;i<d.length;i++)arr[i]=d[i];for(let y=0;y<127;y++)for(let x=1;x<127;x++)for(let c=0;c<3;c++){let idx=(y*128+x)*4+c,old=arr[idx],neu=Math.round(old/255*(levels-1))*(255/(levels-1)),err=(old-neu)*str;arr[idx]=neu;arr[idx+4]+=err*7/16;arr[idx+127*4]+=err*3/16;arr[idx+128*4]+=err*5/16;arr[idx+129*4]+=err/16}for(let i=0;i<d.length;i+=4){d[i]=clamp(arr[i],0,255);d[i+1]=clamp(arr[i+1],0,255);d[i+2]=clamp(arr[i+2],0,255)}}else{let gray=new Float32Array(128*128);for(let i=0,j=0;i<d.length;i+=4,j++)gray[j]=d[i]*.299+d[i+1]*.587+d[i+2]*.114;for(let y=0;y<127;y++)for(let x=1;x<127;x++){let idx=y*128+x,old=gray[idx],neu=old>127?255:0,err=(old-neu)*str;gray[idx]=neu;gray[idx+1]+=err*7/16;gray[idx+127]+=err*3/16;gray[idx+128]+=err*5/16;gray[idx+129]+=err/16}for(let i=0,j=0;i<d.length;i+=4,j++){let v=clamp(gray[j],0,255);d[i]=d[i+1]=d[i+2]=v}}sx.putImageData(img,0,0);let out=document.createElement('canvas');out.width=out.height=imageDiameter;let ox=out.getContext('2d');ox.imageSmoothingEnabled=false;ox.drawImage(small,0,0,imageDiameter,imageDiameter);return out}
 function effectHalftone(base){let size=pv('HALFTONE','SIZE'),plates=Math.round(pv('HALFTONE','PLATES')),angle=(pv('HALFTONE','ANGLE')-50)/50*Math.PI/6;if(size<=0)return applyColorSteps(base,plates);let dot=Math.round(3+size/100*34),out=document.createElement('canvas');out.width=out.height=imageDiameter;let ox=out.getContext('2d');ox.fillStyle='#e8dec8';ox.fillRect(0,0,imageDiameter,imageDiameter);let s=document.createElement('canvas');s.width=s.height=imageDiameter;let sc=s.getContext('2d',{willReadFrequently:true});sc.drawImage(base,0,0);let data=sc.getImageData(0,0,imageDiameter,imageDiameter).data,cols=[[0,0,0],[220,40,40],[40,120,230],[240,190,20],[20,170,110],[190,60,210],[255,120,40],[70,70,70],[30,200,220],[180,120,70]],active=Math.max(1,plates||1);for(let y=-imageDiameter;y<imageDiameter*2;y+=dot)for(let x=-imageDiameter;x<imageDiameter*2;x+=dot){let rx=Math.round((x-C)*Math.cos(angle)-(y-C)*Math.sin(angle)+C),ry=Math.round((x-C)*Math.sin(angle)+(y-C)*Math.cos(angle)+C);if(rx<0||rx>=imageDiameter||ry<0||ry>=imageDiameter)continue;let i=(ry*imageDiameter+rx)*4,r=data[i],g=data[i+1],b=data[i+2],lum=r*.299+g*.587+b*.114,rad=(1-lum/255)*dot*.55,fill='#1a1713';if(plates>0){let pi=Math.floor(((r+g*2+b*3)/255)*active)%Math.min(active,cols.length),co=cols[pi];fill=`rgb(${co[0]},${co[1]},${co[2]})`;ox.globalAlpha=.72}ox.beginPath();ox.arc(rx,ry,rad,0,Math.PI*2);ox.fillStyle=fill;ox.fill();ox.globalAlpha=1}return out}
@@ -115,9 +118,7 @@ function drawDialLabels(){
     ctx.restore();
   }
 }
-function drawFrame(){if(liveMode&&!frozen)updateLiveSource();ctx.clearRect(0,0,W,H);let bg=ctx.createRadialGradient(C,C,180,C,C,410);bg.addColorStop(0,'#2a2117');bg.addColorStop(.65,'#8b632b');bg.addColorStop(1,'#c2954c');ctx.fillStyle=bg;ctx.beginPath();ctx.arc(C,C,375,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#e0be73';ctx.lineWidth=5;ctx.stroke();ctx.fillStyle='#15110d';ctx.beginPath();ctx.arc(C,C,315,0,Math.PI*2);ctx.fill();for(let i=0;i<72;i++){let a=(i*5-90)*Math.PI/180,long=i%6===0,r1=long?284:298,r2=327;ctx.strokeStyle=long?'#2a1d10':'#4a351c';ctx.lineWidth=long?4:1.5;ctx.beginPath();ctx.moveTo(C+Math.cos(a)*r1,C+Math.sin(a)*r1);ctx.lineTo(C+Math.cos(a)*r2,C+Math.sin(a)*r2);ctx.stroke()}drawDialLabels();let img=processImage();ctx.save();ctx.beginPath();ctx.arc(C,C,imageDiameter/2,0,Math.PI*2);ctx.clip();ctx.drawImage(img,C-imageDiameter/2,C-imageDiameter/2);let edge=ctx.createRadialGradient(C,C,imageDiameter*.35,C,C,imageDiameter*.52);edge.addColorStop(0,'rgba(0,0,0,0)');edge.addColorStop(1,'rgba(0,0,0,.13)');ctx.fillStyle=edge;ctx.fillRect(C-imageDiameter/2,C-imageDiameter/2,imageDiameter,imageDiameter);ctx.restore();ctx.strokeStyle='rgba(255,236,185,.48)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(C,C,imageDiameter/2,0,Math.PI*2);ctx.stroke();let now=performance.now();if(now<overlayUntil){let a=clamp((overlayUntil-now)/350,0,1),proc=cp(),par=cpar();ctx.save();ctx.globalAlpha=a;rr(C-115,C+imageDiameter/2-110,230,84,24);ctx.fillStyle='rgba(12,10,7,.58)';ctx.fill();ctx.restore();let top='PROCESS',main=proc.name,sub='';
-    if(uiMode===1){top=proc.name;main=par.name;sub='PARAMETER'}
-    if(uiMode===2){top=proc.name+' / '+par.name;main=String(Math.round(par.value));sub='VALUE'}textCenter(top,C,C+imageDiameter/2-92,13,'normal','#f7e8ba',a);textCenter(main,C,C+imageDiameter/2-64,26,'bold','#fff6d7',a);if(sub)textCenter(sub,C,C+imageDiameter/2-38,13,'normal','#f7e8ba',a)}ctx.save();ctx.fillStyle='#b98c43';ctx.strokeStyle='#efcd86';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(C,42);ctx.lineTo(C-36,138);ctx.lineTo(C+36,138);ctx.closePath();ctx.fill();ctx.stroke();textCenter('A',C,105,38,'bold','#19120c');ctx.restore();if(liveMode&&!frozen)requestAnimationFrame(drawFrame);else if(now<overlayUntil)requestAnimationFrame(drawFrame)}
+function drawFrame(){if(liveMode&&!frozen)updateLiveSource();ctx.clearRect(0,0,W,H);let bg=ctx.createRadialGradient(C,C,180,C,C,410);bg.addColorStop(0,'#2a2117');bg.addColorStop(.65,'#8b632b');bg.addColorStop(1,'#c2954c');ctx.fillStyle=bg;ctx.beginPath();ctx.arc(C,C,375,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#e0be73';ctx.lineWidth=5;ctx.stroke();ctx.fillStyle='#15110d';ctx.beginPath();ctx.arc(C,C,315,0,Math.PI*2);ctx.fill();for(let i=0;i<72;i++){let a=(i*5-90)*Math.PI/180,long=i%6===0,r1=long?284:298,r2=327;ctx.strokeStyle=long?'#2a1d10':'#4a351c';ctx.lineWidth=long?4:1.5;ctx.beginPath();ctx.moveTo(C+Math.cos(a)*r1,C+Math.sin(a)*r1);ctx.lineTo(C+Math.cos(a)*r2,C+Math.sin(a)*r2);ctx.stroke()}drawDialLabels();let img=processImage();ctx.save();ctx.beginPath();ctx.arc(C,C,imageDiameter/2,0,Math.PI*2);ctx.clip();ctx.drawImage(img,C-imageDiameter/2,C-imageDiameter/2);let edge=ctx.createRadialGradient(C,C,imageDiameter*.35,C,C,imageDiameter*.52);edge.addColorStop(0,'rgba(0,0,0,0)');edge.addColorStop(1,'rgba(0,0,0,.13)');ctx.fillStyle=edge;ctx.fillRect(C-imageDiameter/2,C-imageDiameter/2,imageDiameter,imageDiameter);ctx.restore();ctx.strokeStyle='rgba(255,236,185,.48)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(C,C,imageDiameter/2,0,Math.PI*2);ctx.stroke();let now=performance.now();if(now<overlayUntil){let a=clamp((overlayUntil-now)/350,0,1),proc=cp(),par=cpar();ctx.save();ctx.globalAlpha=a;rr(C-115,C+imageDiameter/2-110,230,84,24);ctx.fillStyle='rgba(12,10,7,.58)';ctx.fill();ctx.restore();let top='PROCESS',main=proc.name,sub='';if(uiMode===1){top='PARAMETER';main=par.name;sub=proc.name}if(uiMode===2){top=par.name;main=String(Math.round(par.value));sub=proc.name}textCenter(top,C,C+imageDiameter/2-92,13,'normal','#f7e8ba',a);textCenter(main,C,C+imageDiameter/2-64,26,'bold','#fff6d7',a);if(sub)textCenter(sub,C,C+imageDiameter/2-38,13,'normal','#f7e8ba',a)}ctx.save();ctx.fillStyle='#b98c43';ctx.strokeStyle='#efcd86';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(C,42);ctx.lineTo(C-36,138);ctx.lineTo(C+36,138);ctx.closePath();ctx.fill();ctx.stroke();textCenter('A',C,105,38,'bold','#19120c');ctx.restore();if(liveMode&&!frozen)requestAnimationFrame(drawFrame);else if(now<overlayUntil)requestAnimationFrame(drawFrame)}
 function rotateDial(direction,step){if(uiMode===0){processIndex=(processIndex-direction+processes.length)%processes.length;paramIndex=0}else if(uiMode===1){let ps=cp().params;paramIndex=(paramIndex-direction+ps.length)%ps.length}else{cp().active=true;let par=cpar(),st=par.max===10?1:step;par.value=clamp(par.value+direction*st,par.min,par.max)}showOverlay();drawFrame()}
 function centerPress(){
   if(uiMode===0){
@@ -136,26 +137,19 @@ function centerPress(){
   showOverlay(1100);
   drawFrame();
 }
-
-function backToEffects(){
-  uiMode=0;
-  showOverlay(900);
-  drawFrame();
-}
-
+function backToEffects(){uiMode=0;showOverlay(900);drawFrame()}
 function resetCurrentParameter(){
   if(uiMode===2){
     let par=currentParam();
     par.value=par.def;
     showOverlay(1000);
     drawFrame();
-  }else if(uiMode===1){
+  } else if(uiMode===1){
     backToEffects();
-  }else{
+  } else {
     resetAllParameters();
   }
 }
-
 function resetAllParameters(){
   processes.forEach(p=>{
     p.active=false;
@@ -166,15 +160,14 @@ function resetAllParameters(){
   grainSeed=12345;
   noiseSeed=67890;
   uiMode=0;
-  showOverlay(1200);
+  showOverlay(1100);
   drawFrame();
 }
-
 function mutateRecipe(){
   // RANDOM mutates the full recipe, not only the selected effect.
+  // It activates and changes several real processes at once.
   let real=processes.filter(p=>!p.random);
   let changes=2+Math.floor(Math.random()*4);
-
   for(let c=0;c<changes;c++){
     let p=real[Math.floor(Math.random()*real.length)];
     p.active=true;
@@ -188,13 +181,11 @@ function mutateRecipe(){
       par.value=clamp(par.value-dir*step,par.min,par.max);
     }
   }
-
   grainSeed=Math.floor(Math.random()*2000000000)+1;
   noiseSeed=Math.floor(Math.random()*2000000000)+1;
-  showOverlay(1000);
+  showOverlay(900);
   drawFrame();
-}
-function startMutation(){if(mutateTimer)return;mutateRecipe();mutateTimer=setInterval(mutateRecipe,170)}function stopMutation(){if(holdTimer){clearTimeout(holdTimer);holdTimer=null}if(mutateTimer){clearInterval(mutateTimer);mutateTimer=null}}
+}function startMutation(){if(mutateTimer)return;mutateRecipe();mutateTimer=setInterval(mutateRecipe,170)}function stopMutation(){if(holdTimer){clearTimeout(holdTimer);holdTimer=null}if(mutateTimer){clearInterval(mutateTimer);mutateTimer=null}}
 
 let touchDialActive=false;
 let touchLastAngle=0;
@@ -281,12 +272,5 @@ canvas.addEventListener('wheel',e=>{e.preventDefault();let now=performance.now()
 });
 window.addEventListener('mouseup',()=>{stopMutation()});canvas.addEventListener('click',e=>{if(suppressClick){suppressClick=false;return}let r=canvas.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*W,y=(e.clientY-r.top)/r.height*H;if(Math.hypot(x-C,y-C)<imageDiameter/2)centerPress()});document.getElementById('modeBtn').onclick=centerPress;document.getElementById('mutateBtn').onclick=mutateRecipe;document.getElementById('backBtn').onclick=backToEffects;document.getElementById('resetBtn').onclick=()=>{let p=cpar();p.value=p.def;showOverlay(1000);drawFrame()};document.getElementById('saveBtn').onclick=()=>{let im=processImage(),out=document.createElement('canvas');out.width=out.height=imageDiameter;let ox=out.getContext('2d');ox.save();ox.beginPath();ox.arc(imageDiameter/2,imageDiameter/2,imageDiameter/2,0,Math.PI*2);ox.clip();ox.drawImage(im,0,0);ox.restore();let link=document.createElement('a');link.download=`solaris_${cp().name.toLowerCase()}.png`;link.href=out.toDataURL('image/png');link.click()};document.getElementById('captureBtn').onclick=()=>{if(liveMode){updateLiveSource();frozen=!frozen;document.getElementById('captureBtn').textContent=frozen?'Resume Live':'Freeze Frame';showOverlay(900);drawFrame()}};document.getElementById('cameraBtn').onclick=async()=>{try{if(!liveMode){liveStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720},facingMode:'environment'},audio:false});video.srcObject=liveStream;liveMode=true;frozen=false;document.getElementById('cameraBtn').textContent='Stop Webcam';document.getElementById('captureBtn').textContent='Freeze Frame';showOverlay(1100);drawFrame()}else{liveStream?.getTracks().forEach(t=>t.stop());liveStream=null;liveMode=false;frozen=false;document.getElementById('cameraBtn').textContent='Start Webcam';document.getElementById('captureBtn').textContent='Freeze Frame';showOverlay(900);drawFrame()}}catch(err){alert('Camera access failed. Try Chrome/Firefox, or run from localhost if your browser blocks webcam access on local files.')}};fileInput.addEventListener('change',()=>{let file=fileInput.files[0];if(!file)return;if(liveMode){liveStream?.getTracks().forEach(t=>t.stop());liveStream=null;liveMode=false;frozen=false;document.getElementById('cameraBtn').textContent='Start Webcam';document.getElementById('captureBtn').textContent='Freeze Frame'}let img=new Image();img.onload=()=>{sourceCanvas.width=img.width;sourceCanvas.height=img.height;sourceCtx.drawImage(img,0,0);showOverlay(900);drawFrame()};img.src=URL.createObjectURL(file)});document.addEventListener('keydown',e=>{if(e.key===' '){e.preventDefault();centerPress()}if(e.key==='Escape'||e.key==='Backspace'){e.preventDefault();backToEffects()}if(e.key.toLowerCase()==='o')fileInput.click();if(e.key.toLowerCase()==='r'){resetCurrentParameter()}if(e.key.toLowerCase()==='s')document.getElementById('saveBtn').click();if(e.key.toLowerCase()==='m')mutateRecipe()});createDefaultImage();showOverlay(900);drawFrame();
 </script>
-
-<script>
-document.addEventListener('contextmenu', function(e){ e.preventDefault(); });
-document.addEventListener('selectstart', function(e){ e.preventDefault(); });
-document.addEventListener('dragstart', function(e){ e.preventDefault(); });
-</script>
-
 </body>
 </html>
