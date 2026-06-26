@@ -279,8 +279,46 @@ function updateDialTextLayer(){
 }
 
 function drawDialLabels(){ updateDialTextLayer(); }
-function drawFrame(){if(liveMode&&!frozen)updateLiveSource();ctx.clearRect(0,0,W,H);let bg=ctx.createRadialGradient(C,C,180,C,C,410);bg.addColorStop(0,'#2a2117');bg.addColorStop(.65,'#8b632b');bg.addColorStop(1,'#c2954c');ctx.fillStyle=bg;ctx.beginPath();ctx.arc(C,C,375,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#e0be73';ctx.lineWidth=3;ctx.stroke();for(let i=0;i<72;i++){let a=(i*5-90)*Math.PI/180,long=i%6===0,r1=long?284:298,r2=327;ctx.strokeStyle=long?'#2a1d10':'#4a351c';ctx.lineWidth=long?4:1.5;ctx.beginPath();ctx.moveTo(C+Math.cos(a)*r1,C+Math.sin(a)*r1);ctx.lineTo(C+Math.cos(a)*r2,C+Math.sin(a)*r2);ctx.stroke()}drawDialLabels();let img=processImage();ctx.save();ctx.beginPath();ctx.arc(C,C,imageDiameter/2,0,Math.PI*2);ctx.clip();ctx.drawImage(img,C-imageDiameter/2,C-imageDiameter/2);let edge=ctx.createRadialGradient(C,C,imageDiameter*.35,C,C,imageDiameter*.52);edge.addColorStop(0,'rgba(0,0,0,0)');edge.addColorStop(1,'rgba(0,0,0,.13)');ctx.fillStyle=edge;ctx.fillRect(C-imageDiameter/2,C-imageDiameter/2,imageDiameter,imageDiameter);ctx.restore();ctx.strokeStyle='rgba(255,236,185,.48)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(C,C,imageDiameter/2,0,Math.PI*2);ctx.stroke();let now=performance.now();if(now<overlayUntil){let a=clamp((overlayUntil-now)/350,0,1),proc=cp(),par=cpar();ctx.save();ctx.globalAlpha=a;rr(C-115,C+imageDiameter/2-110,230,84,24);ctx.fillStyle='rgba(12,10,7,.58)';ctx.fill();ctx.restore();let top='PROCESS',main=proc.name,sub='';if(uiMode===1){top='PARAMETER';main=par.name;sub=proc.name}if(uiMode===2){top=par.name;main=String(Math.round(par.value));sub=proc.name}textCenter(top,C,C+imageDiameter/2-92,13,'normal','#f7e8ba',a);textCenter(main,C,C+imageDiameter/2-64,26,'bold','#fff6d7',a);if(sub)textCenter(sub,C,C+imageDiameter/2-38,13,'normal','#f7e8ba',a)}ctx.save();ctx.fillStyle='#b98c43';ctx.strokeStyle='#efcd86';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(C,42);ctx.lineTo(C-36,138);ctx.lineTo(C+36,138);ctx.closePath();ctx.fill();ctx.stroke();textCenter('A',C,105,38,'bold','#19120c');ctx.restore();if(liveMode&&!frozen)requestAnimationFrame(drawFrame);else if(now<overlayUntil)requestAnimationFrame(drawFrame)}
-function rotateDial(direction,step){if(uiMode===0){processIndex=(processIndex-direction+processes.length)%processes.length;paramIndex=0}else if(uiMode===1){let ps=cp().params;paramIndex=(paramIndex-direction+ps.length)%ps.length}else{cp().active=true;let par=cpar(),st=par.max===10?1:step;par.value=clamp(par.value+direction*st,par.min,par.max)}showOverlay();updateDialTextLayer();drawFrame()}
+
+function updateBronzeWheel(){
+  bronzeWheelVisualAngle += (bronzeWheelAngle - bronzeWheelVisualAngle) * 0.22;
+}
+function drawBronzeWheelTicks(){
+  ctx.save();
+  ctx.translate(C,C);
+  ctx.rotate(bronzeWheelVisualAngle * Math.PI / 180);
+
+  // rotating bronze tick ring
+  for(let i=0;i<72;i++){
+    let a=(i*5-90)*Math.PI/180;
+    let longTick=i%6===0;
+    let r1=longTick?318:333;
+    let r2=longTick?365:358;
+
+    ctx.strokeStyle=longTick?'rgba(35,24,12,0.82)':'rgba(70,50,28,0.62)';
+    ctx.lineWidth=longTick?4:1.5;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a)*r1,Math.sin(a)*r1);
+    ctx.lineTo(Math.cos(a)*r2,Math.sin(a)*r2);
+    ctx.stroke();
+  }
+
+  // subtle rotating inner ornament rays
+  for(let i=0;i<24;i++){
+    let a=(i*15-90)*Math.PI/180;
+    ctx.strokeStyle='rgba(240,190,90,0.16)';
+    ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a)*285,Math.sin(a)*285);
+    ctx.lineTo(Math.cos(a)*305,Math.sin(a)*305);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawFrame(){if(liveMode&&!frozen)updateLiveSource();ctx.clearRect(0,0,W,H);let bg=ctx.createRadialGradient(C,C,180,C,C,410);bg.addColorStop(0,'#2a2117');bg.addColorStop(.65,'#8b632b');bg.addColorStop(1,'#c2954c');ctx.fillStyle=bg;ctx.beginPath();ctx.arc(C,C,375,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#e0be73';ctx.lineWidth=3;ctx.stroke();updateBronzeWheel();drawBronzeWheelTicks();for(let i=0;i<72;i++){let a=(i*5-90)*Math.PI/180,long=i%6===0,r1=long?284:298,r2=327;ctx.strokeStyle=long?'#2a1d10':'#4a351c';ctx.lineWidth=long?4:1.5;ctx.beginPath();ctx.moveTo(C+Math.cos(a)*r1,C+Math.sin(a)*r1);ctx.lineTo(C+Math.cos(a)*r2,C+Math.sin(a)*r2);ctx.stroke()}drawDialLabels();let img=processImage();ctx.save();ctx.beginPath();ctx.arc(C,C,imageDiameter/2,0,Math.PI*2);ctx.clip();ctx.drawImage(img,C-imageDiameter/2,C-imageDiameter/2);let edge=ctx.createRadialGradient(C,C,imageDiameter*.35,C,C,imageDiameter*.52);edge.addColorStop(0,'rgba(0,0,0,0)');edge.addColorStop(1,'rgba(0,0,0,.13)');ctx.fillStyle=edge;ctx.fillRect(C-imageDiameter/2,C-imageDiameter/2,imageDiameter,imageDiameter);ctx.restore();ctx.strokeStyle='rgba(255,236,185,.48)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(C,C,imageDiameter/2,0,Math.PI*2);ctx.stroke();let now=performance.now();if(now<overlayUntil){let a=clamp((overlayUntil-now)/350,0,1),proc=cp(),par=cpar();ctx.save();ctx.globalAlpha=a;rr(C-115,C+imageDiameter/2-110,230,84,24);ctx.fillStyle='rgba(12,10,7,.58)';ctx.fill();ctx.restore();let top='PROCESS',main=proc.name,sub='';if(uiMode===1){top='PARAMETER';main=par.name;sub=proc.name}if(uiMode===2){top=par.name;main=String(Math.round(par.value));sub=proc.name}textCenter(top,C,C+imageDiameter/2-92,13,'normal','#f7e8ba',a);textCenter(main,C,C+imageDiameter/2-64,26,'bold','#fff6d7',a);if(sub)textCenter(sub,C,C+imageDiameter/2-38,13,'normal','#f7e8ba',a)}ctx.save();ctx.fillStyle='#b98c43';ctx.strokeStyle='#efcd86';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(C,42);ctx.lineTo(C-36,138);ctx.lineTo(C+36,138);ctx.closePath();ctx.fill();ctx.stroke();textCenter('A',C,105,38,'bold','#19120c');ctx.restore();if(liveMode&&!frozen)requestAnimationFrame(drawFrame);else if(Math.abs(bronzeWheelAngle-bronzeWheelVisualAngle)>0.1)requestAnimationFrame(drawFrame);else if(now<overlayUntil)requestAnimationFrame(drawFrame)}
+function rotateDial(direction,step){if(uiMode===0){processIndex=(processIndex-direction+processes.length)%processes.length;bronzeWheelAngle+=direction*18;bronzeWheelAngle+=direction*18;paramIndex=0}else if(uiMode===1){let ps=cp().params;paramIndex=(paramIndex-direction+ps.length)%ps.length}else{cp().active=true;let par=cpar(),st=par.max===10?1:step;par.value=clamp(par.value+direction*st,par.min,par.max)}showOverlay();updateDialTextLayer();drawFrame()}
 function centerPress(){
   if(uiMode===0){
     if(cp().random){
