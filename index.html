@@ -166,42 +166,48 @@ function effectInvert(base){let mix=pv('INVERT','MIX'),curve=pv('INVERT','CURVE'
 function textCenter(t,x,y,s,w='normal',col='#fff3cf',a=1){ctx.save();ctx.globalAlpha=a;ctx.fillStyle=col;ctx.font=`${w} ${s}px Arial,Helvetica,sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.shadowColor='rgba(0,0,0,.95)';ctx.shadowBlur=12;ctx.shadowOffsetY=2;ctx.fillText(t,x,y);ctx.restore()}
 function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
 
-function dialShortestDelta(target,current,count){
-  let d=target-current;
-  while(d>count/2)d-=count;
-  while(d<-count/2)d+=count;
-  return d;
+function shortestRel(i, sel, n){
+  let rel=i-sel;
+  if(rel>n/2)rel-=n;
+  if(rel<-n/2)rel+=n;
+  return rel;
 }
-function requestDialAnimation(){
-  if(dialAnimating)return;
-  dialAnimating=true;
-  requestAnimationFrame(dialAnimationFrame);
+function easeOutCubic(t){
+  return 1-Math.pow(1-t,3);
 }
-function dialAnimationFrame(){
-  let procN=processes.length || 1;
-  let paramN=(cp().params && cp().params.length) || 1;
-
-  dialVisualProcessIndex += dialShortestDelta(dialTargetProcessIndex,dialVisualProcessIndex,procN)*0.18;
-  dialVisualParamIndex += dialShortestDelta(dialTargetParamIndex,dialVisualParamIndex,paramN)*0.18;
-
-  let diff=uiMode===0
-    ? Math.abs(dialShortestDelta(dialTargetProcessIndex,dialVisualProcessIndex,procN))
-    : Math.abs(dialShortestDelta(dialTargetParamIndex,dialVisualParamIndex,paramN));
-
+function beginDialAnim(){
+  dialAnimActive=true;
+  dialAnimStart=performance.now();
+  requestAnimationFrame(animationTick);
+}
+function animationTick(){
+  if(!dialAnimActive)return;
   drawFrame();
-
-  if(diff>0.006){
-    requestAnimationFrame(dialAnimationFrame);
+  if(performance.now()-dialAnimStart<dialAnimDuration){
+    requestAnimationFrame(animationTick);
   }else{
-    dialAnimating=false;
+    dialAnimActive=false;
+    drawFrame();
   }
+}
+function animatedSelectedIndex(){
+  let now=performance.now();
+  let t=clamp((now-dialAnimStart)/dialAnimDuration,0,1);
+  let e=easeOutCubic(t);
+  let n=uiMode===0?processes.length:((cp().params&&cp().params.length)||1);
+  let from=uiMode===0?prevProcessIndex:prevParamIndex;
+  let to=uiMode===0?processIndex:paramIndex;
+  let d=to-from;
+  if(d>n/2)d-=n;
+  if(d<-n/2)d+=n;
+  return from+d*e;
 }
 
 function drawDialLabels(){
   let list=uiMode===0?processes.map(p=>p.name):cp().params.map(p=>p.name);
-  let selected=uiMode===0?processIndex:paramIndex;
-  let visual=uiMode===0?dialVisualProcessIndex:dialVisualParamIndex;
-  let n=list.length || 1;
+  let sel=uiMode===0?processIndex:paramIndex;
+  let n=list.length||1;
+  let visual=(dialAnimActive?animatedSelectedIndex():sel);
 
   for(let i=0;i<n;i++){
     let rel=i-visual;
@@ -211,21 +217,20 @@ function drawDialLabels(){
     let dist=Math.abs(rel);
     if(dist>4.2)continue;
 
-    // Text wheel: higher on screen so marker doesn't cover selected label.
-    let angle=(-90+rel*28)*Math.PI/180;
-    let r=288;
+    // Smooth circular text path. Selected text is below marker, not under it.
+    let angle=(-90+rel*29)*Math.PI/180;
+    let r=232;
     let x=C+Math.cos(angle)*r;
-    let y=C+Math.sin(angle)*r-56;
+    let y=C+Math.sin(angle)*r-22;
 
-    let isSelected=i===selected;
-    let size=isSelected?27:Math.max(12,18-dist*1.35);
+    let isSelected=(i===sel);
+    let size=isSelected?28:Math.max(12,18-dist*1.25);
     let alpha=isSelected?1:clamp(.52-dist*.11,.12,.50);
     let color=isSelected?'#f0b64f':'#f5ead0';
 
     ctx.save();
-    // Rotate the text tangent to the circular path very subtly.
     ctx.translate(x,y);
-    ctx.rotate(rel*0.055);
+    ctx.rotate(rel*0.045);
     if(!isSelected){
       ctx.filter='blur('+(0.35+dist*0.50)+'px)';
     }
@@ -233,21 +238,20 @@ function drawDialLabels(){
     ctx.restore();
   }
 }
-function drawFrame(){if(liveMode&&!frozen)updateLiveSource();ctx.clearRect(0,0,W,H);let bg=ctx.createRadialGradient(C,C,180,C,C,410);bg.addColorStop(0,'#2a2117');bg.addColorStop(.65,'#8b632b');bg.addColorStop(1,'#c2954c');ctx.fillStyle=bg;ctx.beginPath();ctx.arc(C,C,375,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#e0be73';ctx.lineWidth=3;ctx.stroke();for(let i=0;i<72;i++){let a=(i*5-90)*Math.PI/180,long=i%6===0,r1=long?284:298,r2=327;ctx.strokeStyle=long?'#2a1d10':'#4a351c';ctx.lineWidth=long?4:1.5;ctx.beginPath();ctx.moveTo(C+Math.cos(a)*r1,C+Math.sin(a)*r1);ctx.lineTo(C+Math.cos(a)*r2,C+Math.sin(a)*r2);ctx.stroke()}drawDialLabels();let img=processImage();ctx.save();ctx.beginPath();ctx.arc(C,C,imageDiameter/2,0,Math.PI*2);ctx.clip();ctx.drawImage(img,C-imageDiameter/2,C-imageDiameter/2);let edge=ctx.createRadialGradient(C,C,imageDiameter*.35,C,C,imageDiameter*.52);edge.addColorStop(0,'rgba(0,0,0,0)');edge.addColorStop(1,'rgba(0,0,0,.13)');ctx.fillStyle=edge;ctx.fillRect(C-imageDiameter/2,C-imageDiameter/2,imageDiameter,imageDiameter);ctx.restore();ctx.strokeStyle='rgba(255,236,185,.48)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(C,C,imageDiameter/2,0,Math.PI*2);ctx.stroke();let now=performance.now();if(now<overlayUntil){let a=clamp((overlayUntil-now)/350,0,1),proc=cp(),par=cpar();ctx.save();ctx.globalAlpha=a;rr(C-115,C+imageDiameter/2-122,230,84,24);ctx.fillStyle='rgba(12,10,7,.58)';ctx.fill();ctx.restore();let top='PROCESS',main=proc.name,sub='';if(uiMode===1){top='PARAMETER';main=par.name;sub=proc.name}if(uiMode===2){top=par.name;main=String(Math.round(par.value));sub=proc.name}textCenter(top,C,C+imageDiameter/2-104,13,'normal','#f7e8ba',a);textCenter(main,C,C+imageDiameter/2-75,26,'bold','#fff6d7',a);if(sub)textCenter(sub,C,C+imageDiameter/2-48,13,'normal','#f7e8ba',a)}ctx.save();ctx.fillStyle='#b98c43';ctx.strokeStyle='#efcd86';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(C,42);ctx.lineTo(C-36,138);ctx.lineTo(C+36,138);ctx.closePath();ctx.fill();ctx.stroke();textCenter('A',C,105,38,'bold','#19120c');ctx.restore();if(liveMode&&!frozen)requestAnimationFrame(drawFrame);else if(now<overlayUntil)requestAnimationFrame(drawFrame)}
+function drawFrame(){if(liveMode&&!frozen)updateLiveSource();ctx.clearRect(0,0,W,H);let bg=ctx.createRadialGradient(C,C,180,C,C,410);bg.addColorStop(0,'#2a2117');bg.addColorStop(.65,'#8b632b');bg.addColorStop(1,'#c2954c');ctx.fillStyle=bg;ctx.beginPath();ctx.arc(C,C,375,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#e0be73';ctx.lineWidth=3;ctx.stroke();for(let i=0;i<72;i++){let a=(i*5-90)*Math.PI/180,long=i%6===0,r1=long?284:298,r2=327;ctx.strokeStyle=long?'#2a1d10':'#4a351c';ctx.lineWidth=long?4:1.5;ctx.beginPath();ctx.moveTo(C+Math.cos(a)*r1,C+Math.sin(a)*r1);ctx.lineTo(C+Math.cos(a)*r2,C+Math.sin(a)*r2);ctx.stroke()}drawDialLabels();let img=processImage();ctx.save();ctx.beginPath();ctx.arc(C,C,imageDiameter/2,0,Math.PI*2);ctx.clip();ctx.drawImage(img,C-imageDiameter/2,C-imageDiameter/2);let edge=ctx.createRadialGradient(C,C,imageDiameter*.35,C,C,imageDiameter*.52);edge.addColorStop(0,'rgba(0,0,0,0)');edge.addColorStop(1,'rgba(0,0,0,.13)');ctx.fillStyle=edge;ctx.fillRect(C-imageDiameter/2,C-imageDiameter/2,imageDiameter,imageDiameter);ctx.restore();ctx.strokeStyle='rgba(255,236,185,.48)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(C,C,imageDiameter/2,0,Math.PI*2);ctx.stroke();let now=performance.now();if(now<overlayUntil){let a=clamp((overlayUntil-now)/350,0,1),proc=cp(),par=cpar();ctx.save();ctx.globalAlpha=a;rr(C-115,C+imageDiameter/2-110,230,84,24);ctx.fillStyle='rgba(12,10,7,.58)';ctx.fill();ctx.restore();let top='PROCESS',main=proc.name,sub='';if(uiMode===1){top='PARAMETER';main=par.name;sub=proc.name}if(uiMode===2){top=par.name;main=String(Math.round(par.value));sub=proc.name}textCenter(top,C,C+imageDiameter/2-92,13,'normal','#f7e8ba',a);textCenter(main,C,C+imageDiameter/2-64,26,'bold','#fff6d7',a);if(sub)textCenter(sub,C,C+imageDiameter/2-38,13,'normal','#f7e8ba',a)}ctx.save();ctx.fillStyle='#b98c43';ctx.strokeStyle='#efcd86';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(C,42);ctx.lineTo(C-36,138);ctx.lineTo(C+36,138);ctx.closePath();ctx.fill();ctx.stroke();textCenter('A',C,105,38,'bold','#19120c');ctx.restore();if(liveMode&&!frozen)requestAnimationFrame(drawFrame);else if(now<overlayUntil)requestAnimationFrame(drawFrame)}
 function rotateDial(direction,step){
   if(uiMode===0){
+    prevProcessIndex=processIndex;
     processIndex=(processIndex-direction+processes.length)%processes.length;
     paramIndex=0;
-    dialTargetProcessIndex=processIndex;
-    dialVisualParamIndex=0;
-    dialTargetParamIndex=0;
-    requestDialAnimation();
+    prevParamIndex=0;
+    beginDialAnim();
   }else if(uiMode===1){
-    let params=cp().params || [];
+    let params=cp().params||[];
     if(params.length){
+      prevParamIndex=paramIndex;
       paramIndex=(paramIndex-direction+params.length)%params.length;
-      dialTargetParamIndex=paramIndex;
-      requestDialAnimation();
+      beginDialAnim();
     }
   }else{
     let par=cpar();
@@ -266,27 +270,22 @@ function centerPress(){
     }
     uiMode=1;
     paramIndex=0;
-    dialTargetParamIndex=0;
-    dialVisualParamIndex=0;
+    prevParamIndex=0;
   }else if(uiMode===1){
     cp().active=true;
     uiMode=2;
   }else{
-    // Apply/commit value and go back to parameter list.
     cp().active=true;
     uiMode=1;
   }
   showOverlay(1100);
   drawFrame();
 }
-
 function backToEffects(){
   uiMode=0;
-  dialTargetProcessIndex=processIndex;
   showOverlay(900);
   drawFrame();
 }
-
 function resetCurrentParameter(){
   if(uiMode===2){
     let par=cpar();
@@ -299,13 +298,10 @@ function resetCurrentParameter(){
     resetAllParameters();
   }
 }
-
 function resetAllParameters(){
   processes.forEach(p=>{
     p.active=false;
-    if(p.params){
-      p.params.forEach(par=>par.value=par.def);
-    }
+    if(p.params)p.params.forEach(par=>par.value=par.def);
   });
   grainSeed=12345;
   noiseSeed=67890;
@@ -313,14 +309,11 @@ function resetAllParameters(){
   showOverlay(1200);
   drawFrame();
 }
-
 function mutateRecipe(){
-  // RANDOM creates a fresh procedural recipe each time, not additive.
+  // Fresh procedural recipe every click.
   processes.forEach(p=>{
     p.active=false;
-    if(p.params){
-      p.params.forEach(par=>par.value=par.def);
-    }
+    if(p.params)p.params.forEach(par=>par.value=par.def);
   });
 
   let real=processes.filter(p=>!p.random);
@@ -329,8 +322,8 @@ function mutateRecipe(){
   for(let c=0;c<changes;c++){
     let p=real[Math.floor(Math.random()*real.length)];
     p.active=true;
-
     let edits=1+(Math.random()<.35?1:0);
+
     for(let e=0;e<edits;e++){
       let par=p.params[Math.floor(Math.random()*p.params.length)];
       let range=par.max-par.min;
@@ -338,7 +331,6 @@ function mutateRecipe(){
       if(range<=10){
         par.value=Math.floor(Math.random()*(par.max-par.min+1))+par.min;
       }else{
-        // centered but varied: procedural, not pure chaos
         let v=35+Math.random()*55;
         if(Math.random()<.18)v=Math.random()*100;
         par.value=clamp(Math.round(v/5)*5,par.min,par.max);
