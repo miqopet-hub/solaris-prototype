@@ -19,7 +19,7 @@ input[type=file]{display:none}
 </style>
 </head>
 <body>
-<div class="hint">ESP-P4 SIM · records inner screen · converts WebM to MP4 · RANDOM</div>
+<div class="hint">ESP-P4 SIM · front cam mirrored · Rec Gallery exports phone-friendly MP4</div>
 <canvas id="screen" width="900" height="900"></canvas>
 <video id="video" autoplay playsinline muted></video>
 <div class="badge" id="perf">ESP 240 · -- ms</div>
@@ -28,7 +28,7 @@ input[type=file]{display:none}
   <button id="cameraBtn">Camera</button>
   <button id="frontCamBtn">Front Cam</button>
   <button id="freezeBtn">Freeze</button>
-  <button id="recordBtn">Rec MP4</button>
+  <button id="recordBtn">Rec Gallery</button>
   <select id="resSel" title="Internal processing resolution">
     <option value="160">160</option>
     <option value="240" selected>240</option>
@@ -56,7 +56,9 @@ let dialRotation=0, targetDialRot=0;
 let overlayUntil=0, lastWheelTime=0, holdTimer=null, suppressClick=false, holdStart=0, holdDuration=760, holdLabel='', shakeUntil=0, feedbackMsg='', feedbackUntil=0, resetFlashUntil=0;
 let grainSeed=12345, noiseSeed=67890;
 let recorder=null, recordedChunks=[], recording=false, recordStart=0;
-let recordCanvas=makeCanvas(1000), recordCtx=recordCanvas.getContext('2d');
+const RECORD_SIZE=720;
+let convertingVideo=false;
+let recordCanvas=makeCanvas(RECORD_SIZE), recordCtx=recordCanvas.getContext('2d');
 let lastProcessedImage=null;
 let lastFrameMS=0, lastFpsUpdate=0;
 
@@ -480,9 +482,14 @@ async function convertBlobToMP4(inputBlob){
   await ffmpegInstance.writeFile('input.webm', await fetchFile(inputBlob));
   await ffmpegInstance.exec([
     '-i','input.webm',
+    '-an',
+    '-vf','scale=720:720:flags=lanczos,format=yuv420p',
+    '-r','24',
     '-c:v','libx264',
+    '-profile:v','baseline',
+    '-level','3.1',
     '-pix_fmt','yuv420p',
-    '-movflags','faststart',
+    '-movflags','+faststart',
     '-preset','veryfast',
     'output.mp4'
   ]);
@@ -498,7 +505,7 @@ function formatTime(seconds){
   return `${m}:${s}`;
 }
 function drawRecordingFrame(){
-  const size=1000;
+  const size=RECORD_SIZE;
   if(recordCanvas.width!==size || recordCanvas.height!==size){
     recordCanvas.width=size;
     recordCanvas.height=size;
@@ -522,11 +529,24 @@ function drawRecordingFrame(){
 }
 function toggleRecording(){
   const btn=document.getElementById('recordBtn');
+
+  if(convertingVideo){
+    triggerFeedback('WAIT MP4');
+    return;
+  }
+
   if(recording){
-    try{ recorder && recorder.state!=='inactive' && recorder.stop(); }catch(e){}
+    try{
+      convertingVideo=true;
+      btn.textContent='Converting...';
+      triggerFeedback('CONVERTING');
+      if(recorder && recorder.state!=='inactive') recorder.stop();
+    }catch(e){
+      console.error(e);
+      convertingVideo=false;
+      btn.textContent='Rec Gallery';
+    }
     recording=false;
-    btn.textContent='Rec MP4';
-    triggerFeedback('SAVING VIDEO');
     return;
   }
 
@@ -537,10 +557,11 @@ function toggleRecording(){
 
   drawRecordingFrame();
   recordedChunks=[];
-  const stream=recordCanvas.captureStream(30);
+  const stream=recordCanvas.captureStream(24);
   const mimeType=getRecordingMimeType();
+
   try{
-    recorder=new MediaRecorder(stream,mimeType?{mimeType}:undefined);
+    recorder=new MediaRecorder(stream,mimeType?{mimeType, videoBitsPerSecond:4500000}:{videoBitsPerSecond:4500000});
   }catch(err){
     alert('Could not start recording in this browser.');
     return;
@@ -549,24 +570,30 @@ function toggleRecording(){
   recorder.ondataavailable=e=>{
     if(e.data && e.data.size>0) recordedChunks.push(e.data);
   };
+
   recorder.onstop=async()=>{
     const ext=extensionFromMimeType(mimeType);
     const rawBlob=new Blob(recordedChunks,{type:mimeType || 'video/webm'});
 
-    if(ext==='mp4'){
-      downloadBlob(rawBlob,`sira_screen_recording_${Date.now()}.mp4`);
-      triggerFeedback('MP4 SAVED');
-      return;
-    }
-
     try{
-      triggerFeedback('CONVERTING MP4');
-      const mp4Blob=await convertBlobToMP4(rawBlob);
-      downloadBlob(mp4Blob,`sira_screen_recording_${Date.now()}.mp4`);
-      triggerFeedback('MP4 SAVED');
+      if(ext==='mp4'){
+        downloadBlob(rawBlob,`sira_gallery_${Date.now()}.mp4`);
+        triggerFeedback('MP4 SAVED');
+      }else{
+        triggerFeedback('MP4 CONVERTING');
+        const mp4Blob=await convertBlobToMP4(rawBlob);
+        downloadBlob(mp4Blob,`sira_gallery_${Date.now()}.mp4`);
+        triggerFeedback('MP4 SAVED');
+      }
     }catch(err){
       console.error(err);
-      alert('MP4 conversion failed. This browser blocked the MP4 converter or it could not load ffmpeg.wasm. Try Chrome/Edge with internet access, or Safari native MP4 recording.');
+      // Do not silently fail. Export the raw recording so Stop always produces a file.
+      downloadBlob(rawBlob,`sira_gallery_fallback_${Date.now()}.webm`);
+      alert('MP4 conversion failed here, so the raw WebM recording was saved instead. For a video that saves directly to phone gallery, use Safari on iPhone or Chrome/Edge with internet access and allow the MP4 converter to load.');
+    }finally{
+      convertingVideo=false;
+      btn.textContent='Rec Gallery';
+      recordedChunks=[];
     }
   };
 
@@ -577,23 +604,32 @@ function toggleRecording(){
   triggerFeedback(extensionFromMimeType(mimeType)==='mp4'?'REC MP4':'REC → MP4');
 }
 function drawRecordingIndicator(now){
-  if(!recording)return;
+  if(!recording && !convertingVideo)return;
   const sec=(now-recordStart)/1000;
   ctx.save();
   ctx.globalAlpha=.95;
   ctx.fillStyle='rgba(0,0,0,.55)';
   ctx.beginPath();
-  ctx.roundRect(C-54,C-screenR-70,108,30,15);
+  ctx.roundRect(C-75,C-screenR-70,150,30,15);
   ctx.fill();
-  ctx.beginPath();
-  ctx.arc(C-36,C-screenR-55,5,0,Math.PI*2);
-  ctx.fillStyle=(Math.floor(sec*2)%2===0)?'#ff4b35':'#7d1d14';
-  ctx.fill();
-  ctx.font='bold 12px Arial,Helvetica,sans-serif';
-  ctx.textAlign='left';
-  ctx.textBaseline='middle';
-  ctx.fillStyle='#ffd7c8';
-  ctx.fillText(`REC ${formatTime(sec)}`,C-25,C-screenR-55);
+
+  if(recording){
+    ctx.beginPath();
+    ctx.arc(C-56,C-screenR-55,5,0,Math.PI*2);
+    ctx.fillStyle=(Math.floor(sec*2)%2===0)?'#ff4b35':'#7d1d14';
+    ctx.fill();
+    ctx.font='bold 12px Arial,Helvetica,sans-serif';
+    ctx.textAlign='left';
+    ctx.textBaseline='middle';
+    ctx.fillStyle='#ffd7c8';
+    ctx.fillText(`REC ${formatTime(sec)}`,C-45,C-screenR-55);
+  }else{
+    ctx.font='bold 12px Arial,Helvetica,sans-serif';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillStyle='#ffe0a0';
+    ctx.fillText('CONVERTING MP4',C,C-screenR-55);
+  }
   ctx.restore();
 }
 
@@ -612,8 +648,23 @@ function createDefaultImage(){
 }
 function updateLiveSource(){
   if(!liveMode||frozen||video.readyState<2)return;
-  sourceCanvas.width=video.videoWidth||900;sourceCanvas.height=video.videoHeight||900;
-  sourceCtx.drawImage(video,0,0,sourceCanvas.width,sourceCanvas.height);
+  sourceCanvas.width=video.videoWidth||900;
+  sourceCanvas.height=video.videoHeight||900;
+
+  sourceCtx.save();
+  sourceCtx.clearRect(0,0,sourceCanvas.width,sourceCanvas.height);
+
+  // Front camera is mirrored horizontally, like a normal phone selfie camera.
+  // This affects preview, still PNG, and video recording consistently.
+  if(cameraFacing==='user'){
+    sourceCtx.translate(sourceCanvas.width,0);
+    sourceCtx.scale(-1,1);
+    sourceCtx.drawImage(video,0,0,sourceCanvas.width,sourceCanvas.height);
+  }else{
+    sourceCtx.drawImage(video,0,0,sourceCanvas.width,sourceCanvas.height);
+  }
+
+  sourceCtx.restore();
 }
 function fitSourceToP(){
   updateLiveSource();
