@@ -19,7 +19,7 @@ input[type=file]{display:none}
 </style>
 </head>
 <body>
-<div class="hint">ESP-P4 SIM · preview 160/240/320 · save 1000 true redraw · slow 1 / fast 5 / faster 10</div>
+<div class="hint">ESP-P4 SIM · record/save inner screen only · slow 1 / fast 5 / faster 10</div>
 <canvas id="screen" width="900" height="900"></canvas>
 <video id="video" autoplay playsinline muted></video>
 <div class="badge" id="perf">ESP 240 · -- ms</div>
@@ -27,6 +27,7 @@ input[type=file]{display:none}
   <label>Upload<input id="fileInput" type="file" accept="image/*"></label>
   <button id="cameraBtn">Camera</button>
   <button id="freezeBtn">Freeze</button>
+  <button id="recordBtn">Rec</button>
   <select id="resSel" title="Internal processing resolution">
     <option value="160">160</option>
     <option value="240" selected>240</option>
@@ -53,6 +54,9 @@ let stack=[], draft=null;
 let dialRotation=0, targetDialRot=0;
 let overlayUntil=0, lastWheelTime=0, holdTimer=null, suppressClick=false, holdStart=0, holdDuration=760, holdLabel='', shakeUntil=0, feedbackMsg='', feedbackUntil=0, resetFlashUntil=0;
 let grainSeed=12345, noiseSeed=67890;
+let recorder=null, recordedChunks=[], recording=false, recordStart=0;
+let recordCanvas=makeCanvas(1000), recordCtx=recordCanvas.getContext('2d');
+let lastProcessedImage=null;
 let lastFrameMS=0, lastFpsUpdate=0;
 
 const processes=[
@@ -368,6 +372,112 @@ function saveHighResolutionCirclePNG(){
   triggerFeedback(`SAVED 1000 PNG`);
 }
 
+function getRecordingMimeType(){
+  const types=[
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm'
+  ];
+  for(const t of types){
+    if(window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t;
+  }
+  return '';
+}
+function formatTime(seconds){
+  seconds=Math.max(0,Math.floor(seconds));
+  const m=String(Math.floor(seconds/60)).padStart(2,'0');
+  const s=String(seconds%60).padStart(2,'0');
+  return `${m}:${s}`;
+}
+function drawRecordingFrame(){
+  const size=1000;
+  if(recordCanvas.width!==size || recordCanvas.height!==size){
+    recordCanvas.width=size;
+    recordCanvas.height=size;
+    recordCtx=recordCanvas.getContext('2d');
+  }
+
+  const img=lastProcessedImage || processImage();
+
+  recordCtx.clearRect(0,0,size,size);
+  recordCtx.save();
+  recordCtx.beginPath();
+  recordCtx.arc(size/2,size/2,size/2,0,Math.PI*2);
+  recordCtx.clip();
+
+  // Record only the inner processed screen, no bronze UI, no labels.
+  recordCtx.imageSmoothingEnabled=true;
+  recordCtx.imageSmoothingQuality='high';
+  recordCtx.drawImage(img,0,0,size,size);
+
+  recordCtx.restore();
+}
+function toggleRecording(){
+  const btn=document.getElementById('recordBtn');
+  if(recording){
+    try{ recorder && recorder.state!=='inactive' && recorder.stop(); }catch(e){}
+    recording=false;
+    btn.textContent='Rec';
+    triggerFeedback('SAVING VIDEO');
+    return;
+  }
+
+  if(!recordCanvas.captureStream || !window.MediaRecorder){
+    alert('Video recording is not supported in this browser. Try Chrome or Edge.');
+    return;
+  }
+
+  drawRecordingFrame();
+  recordedChunks=[];
+  const stream=recordCanvas.captureStream(30);
+  const mimeType=getRecordingMimeType();
+  try{
+    recorder=new MediaRecorder(stream,mimeType?{mimeType}:undefined);
+  }catch(err){
+    alert('Could not start recording in this browser.');
+    return;
+  }
+
+  recorder.ondataavailable=e=>{
+    if(e.data && e.data.size>0) recordedChunks.push(e.data);
+  };
+  recorder.onstop=()=>{
+    const blob=new Blob(recordedChunks,{type:mimeType || 'video/webm'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.download=`sira_screen_recording_${Date.now()}.webm`;
+    a.href=url;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),3000);
+  };
+
+  recorder.start(250);
+  recording=true;
+  recordStart=performance.now();
+  btn.textContent='Stop';
+  triggerFeedback('REC SCREEN');
+}
+function drawRecordingIndicator(now){
+  if(!recording)return;
+  const sec=(now-recordStart)/1000;
+  ctx.save();
+  ctx.globalAlpha=.95;
+  ctx.fillStyle='rgba(0,0,0,.55)';
+  ctx.beginPath();
+  ctx.roundRect(C-54,C-screenR-70,108,30,15);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(C-36,C-screenR-55,5,0,Math.PI*2);
+  ctx.fillStyle=(Math.floor(sec*2)%2===0)?'#ff4b35':'#7d1d14';
+  ctx.fill();
+  ctx.font='bold 12px Arial,Helvetica,sans-serif';
+  ctx.textAlign='left';
+  ctx.textBaseline='middle';
+  ctx.fillStyle='#ffd7c8';
+  ctx.fillText(`REC ${formatTime(sec)}`,C-25,C-screenR-55);
+  ctx.restore();
+}
+
 function createDefaultImage(){
   sourceCanvas.width=900;sourceCanvas.height=900;
   const g=sourceCtx.createLinearGradient(0,0,0,900);
@@ -571,7 +681,7 @@ function drawRotatingDial(){
   ctx.beginPath();ctx.arc(C,C,ringOuter,0,Math.PI*2);ctx.strokeStyle='rgba(255,235,150,.45)';ctx.lineWidth=7;ctx.stroke();ctx.beginPath();ctx.arc(C,C,ringInner,0,Math.PI*2);ctx.strokeStyle='rgba(15,7,0,.82)';ctx.lineWidth=12;ctx.stroke();
 }
 function drawScreen(){
-  const img=processImage();ctx.save();ctx.beginPath();ctx.arc(C,C,screenR,0,Math.PI*2);ctx.clip();ctx.fillStyle='#000';ctx.fillRect(C-screenR,C-screenR,screenR*2,screenR*2);ctx.imageSmoothingEnabled=false;ctx.drawImage(img,C-screenR,C-screenR,screenR*2,screenR*2);ctx.imageSmoothingEnabled=true;ctx.fillStyle='rgba(0,0,0,.12)';ctx.fillRect(C-screenR,C-screenR,screenR*2,screenR*2);ctx.restore();ctx.beginPath();ctx.arc(C,C,screenR,0,Math.PI*2);ctx.strokeStyle='rgba(255,220,100,.35)';ctx.lineWidth=4;ctx.stroke();
+  const img=processImage();lastProcessedImage=img;ctx.save();ctx.beginPath();ctx.arc(C,C,screenR,0,Math.PI*2);ctx.clip();ctx.fillStyle='#000';ctx.fillRect(C-screenR,C-screenR,screenR*2,screenR*2);ctx.imageSmoothingEnabled=false;ctx.drawImage(img,C-screenR,C-screenR,screenR*2,screenR*2);ctx.imageSmoothingEnabled=true;ctx.fillStyle='rgba(0,0,0,.12)';ctx.fillRect(C-screenR,C-screenR,screenR*2,screenR*2);ctx.restore();ctx.beginPath();ctx.arc(C,C,screenR,0,Math.PI*2);ctx.strokeStyle='rgba(255,220,100,.35)';ctx.lineWidth=4;ctx.stroke();
 }
 function drawTicks(){for(let i=0;i<72;i++){const a=i/72*Math.PI*2-Math.PI/2,isMaj=i%9===0,isMed=i%3===0,inner=screenR-(isMaj?14:isMed?9:5),outer=screenR-1;ctx.beginPath();ctx.moveTo(C+Math.cos(a)*inner,C+Math.sin(a)*inner);ctx.lineTo(C+Math.cos(a)*outer,C+Math.sin(a)*outer);ctx.strokeStyle=isMaj?'rgba(220,180,80,.7)':isMed?'rgba(180,140,60,.4)':'rgba(140,100,40,.2)';ctx.lineWidth=isMaj?1.5:.8;ctx.stroke()}}
 function textCenter(t,x,y,s,w='normal',col='#fff3cf',a=1){ctx.save();ctx.globalAlpha=a;ctx.fillStyle=col;ctx.font=`${w} ${s}px Arial,Helvetica,sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.shadowColor='rgba(0,0,0,.95)';ctx.shadowBlur=12;ctx.shadowOffsetY=2;ctx.fillText(t,x,y);ctx.restore()}
@@ -655,6 +765,8 @@ function drawFrame(){
   drawLabels();
   drawHoldProgress(now);
   drawFeedback(now);
+  drawRecordingIndicator(now);
+  if(recording) drawRecordingFrame();
   ctx.restore();
 
   if(now-lastFpsUpdate>180){
@@ -735,6 +847,7 @@ document.getElementById('resSel').onchange=e=>{P=Number(e.target.value);showOver
 document.getElementById('rgb565Btn').onclick=e=>{simulateRGB565=!simulateRGB565;e.target.textContent=simulateRGB565?'RGB565 ON':'RGB565 OFF';showOverlay(900)};
 document.getElementById('resetBtn').onclick=resetAll;
 document.getElementById('saveBtn').onclick=saveHighResolutionCirclePNG;
+document.getElementById('recordBtn').onclick=toggleRecording;
 document.getElementById('freezeBtn').onclick=()=>{if(liveMode){updateLiveSource();frozen=!frozen;showOverlay(900)}};
 document.getElementById('cameraBtn').onclick=async()=>{try{if(!liveMode){liveStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720},facingMode:'environment'},audio:false});video.srcObject=liveStream;liveMode=true;frozen=false;showOverlay(1100)}else{liveStream?.getTracks().forEach(t=>t.stop());liveStream=null;liveMode=false;frozen=false;showOverlay(900)}}catch(err){alert('Camera failed. Use HTTPS/localhost or mobile browser permissions.')}};
 fileInput.addEventListener('change',()=>{const file=fileInput.files[0];if(!file)return;if(liveMode){liveStream?.getTracks().forEach(t=>t.stop());liveStream=null;liveMode=false;frozen=false}const img=new Image();img.onload=()=>{sourceCanvas.width=img.width;sourceCanvas.height=img.height;sourceCtx.drawImage(img,0,0);showOverlay(900);URL.revokeObjectURL(img.src)};img.src=URL.createObjectURL(file)});
