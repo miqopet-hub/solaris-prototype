@@ -19,15 +19,16 @@ input[type=file]{display:none}
 </style>
 </head>
 <body>
-<div class="hint">ESP-P4 SIM · record/save inner screen only · slow 1 / fast 5 / faster 10</div>
+<div class="hint">ESP-P4 SIM · records inner screen · converts WebM to MP4 · RANDOM</div>
 <canvas id="screen" width="900" height="900"></canvas>
 <video id="video" autoplay playsinline muted></video>
 <div class="badge" id="perf">ESP 240 · -- ms</div>
 <div class="toolbar">
   <label>Upload<input id="fileInput" type="file" accept="image/*"></label>
   <button id="cameraBtn">Camera</button>
+  <button id="frontCamBtn">Front Cam</button>
   <button id="freezeBtn">Freeze</button>
-  <button id="recordBtn">Rec</button>
+  <button id="recordBtn">Rec MP4</button>
   <select id="resSel" title="Internal processing resolution">
     <option value="160">160</option>
     <option value="240" selected>240</option>
@@ -48,7 +49,7 @@ let P = 240;
 let simulateRGB565 = true;
 let sourceCanvas = document.createElement('canvas');
 let sourceCtx = sourceCanvas.getContext('2d',{willReadFrequently:true});
-let liveMode=false, liveStream=null, frozen=false;
+let liveMode=false, liveStream=null, frozen=false, cameraFacing='environment';
 let processIndex=0, paramIndex=0, uiMode='effects';
 let stack=[], draft=null;
 let dialRotation=0, targetDialRot=0;
@@ -84,7 +85,8 @@ const processes=[
   ]},
   {name:'INVERT',params:[
     {name:'MIX',value:50,def:50,min:0,max:100,step:1}
-  ]}
+  ]},
+  {name:'RANDOM',params:[]}
 ];
 
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
@@ -129,6 +131,41 @@ function upsertDraftToStack(){
   draft=cloneEntry(entry);
   draft.editIndex=stack.length-1;
   return true;
+}
+
+function randInt(min,max){return Math.floor(Math.random()*(max-min+1))+min}
+function randomizeEntry(proc){
+  const entry=neutralEffect(proc);
+  for(const p of entry.params){
+    if(p.max===10){
+      p.value=randInt(p.min,p.max);
+    }else{
+      if(p.name==='SIZE') p.value=randInt(8,85);
+      else if(p.name==='AMOUNT') p.value=randInt(25,100);
+      else if(p.name==='DIFFUSE') p.value=randInt(20,100);
+      else if(p.name==='MIX') p.value=randInt(20,100);
+      else p.value=randInt(p.min,p.max);
+    }
+  }
+  return entry;
+}
+function randomRecipe(){
+  const pool=processes.filter(p=>p.name!=='RANDOM');
+  const count=randInt(1,3);
+  const used=new Set();
+  const recipe=[];
+  while(recipe.length<count && used.size<pool.length){
+    const p=pool[randInt(0,pool.length-1)];
+    if(used.has(p.name)) continue;
+    used.add(p.name);
+    recipe.push(randomizeEntry(p));
+  }
+  stack=recipe;
+  draft=null;
+  uiMode='effects';
+  paramIndex=0;
+  triggerFeedback(`RANDOM ${stack.length}/3`);
+  showOverlay(1000);
 }
 
 function paramValue(entry,name){const p=entry.params.find(x=>x.name===name);return p?p.value:0}
@@ -373,7 +410,12 @@ function saveHighResolutionCirclePNG(){
 }
 
 function getRecordingMimeType(){
+  // MediaRecorder support is browser-dependent.
+  // We record with the best available codec, then convert to MP4 on stop when needed.
   const types=[
+    'video/mp4;codecs=h264',
+    'video/mp4;codecs=avc1.42E01E',
+    'video/mp4',
     'video/webm;codecs=vp9',
     'video/webm;codecs=vp8',
     'video/webm'
@@ -382,6 +424,72 @@ function getRecordingMimeType(){
     if(window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t;
   }
   return '';
+}
+function extensionFromMimeType(mimeType){
+  return mimeType && mimeType.includes('mp4') ? 'mp4' : 'webm';
+}
+function downloadBlob(blob, filename){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.download=filename;
+  a.href=url;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
+}
+function loadScriptOnce(src){
+  return new Promise((resolve,reject)=>{
+    const existing=[...document.scripts].find(s=>s.src===src);
+    if(existing){
+      if(existing.dataset.loaded==='true') resolve();
+      else existing.addEventListener('load',()=>resolve(),{once:true});
+      return;
+    }
+    const s=document.createElement('script');
+    s.src=src;
+    s.async=true;
+    s.onload=()=>{s.dataset.loaded='true';resolve()};
+    s.onerror=()=>reject(new Error('Could not load '+src));
+    document.head.appendChild(s);
+  });
+}
+let ffmpegInstance=null;
+async function convertBlobToMP4(inputBlob){
+  triggerFeedback('LOADING MP4 ENGINE');
+
+  await loadScriptOnce('https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js');
+  await loadScriptOnce('https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js');
+
+  const { FFmpeg } = window.FFmpegWASM;
+  const { toBlobURL, fetchFile } = window.FFmpegUtil;
+
+  if(!ffmpegInstance){
+    ffmpegInstance=new FFmpeg();
+    ffmpegInstance.on('progress',({progress})=>{
+      const pct=Math.round((progress||0)*100);
+      feedbackMsg=`MP4 ${pct}%`;
+      feedbackUntil=performance.now()+500;
+    });
+
+    const baseURL='https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+    await ffmpegInstance.load({
+      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`,'text/javascript'),
+      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`,'application/wasm')
+    });
+  }
+
+  await ffmpegInstance.writeFile('input.webm', await fetchFile(inputBlob));
+  await ffmpegInstance.exec([
+    '-i','input.webm',
+    '-c:v','libx264',
+    '-pix_fmt','yuv420p',
+    '-movflags','faststart',
+    '-preset','veryfast',
+    'output.mp4'
+  ]);
+  const data=await ffmpegInstance.readFile('output.mp4');
+  await ffmpegInstance.deleteFile('input.webm').catch(()=>{});
+  await ffmpegInstance.deleteFile('output.mp4').catch(()=>{});
+  return new Blob([data.buffer],{type:'video/mp4'});
 }
 function formatTime(seconds){
   seconds=Math.max(0,Math.floor(seconds));
@@ -417,7 +525,7 @@ function toggleRecording(){
   if(recording){
     try{ recorder && recorder.state!=='inactive' && recorder.stop(); }catch(e){}
     recording=false;
-    btn.textContent='Rec';
+    btn.textContent='Rec MP4';
     triggerFeedback('SAVING VIDEO');
     return;
   }
@@ -441,21 +549,32 @@ function toggleRecording(){
   recorder.ondataavailable=e=>{
     if(e.data && e.data.size>0) recordedChunks.push(e.data);
   };
-  recorder.onstop=()=>{
-    const blob=new Blob(recordedChunks,{type:mimeType || 'video/webm'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.download=`sira_screen_recording_${Date.now()}.webm`;
-    a.href=url;
-    a.click();
-    setTimeout(()=>URL.revokeObjectURL(url),3000);
+  recorder.onstop=async()=>{
+    const ext=extensionFromMimeType(mimeType);
+    const rawBlob=new Blob(recordedChunks,{type:mimeType || 'video/webm'});
+
+    if(ext==='mp4'){
+      downloadBlob(rawBlob,`sira_screen_recording_${Date.now()}.mp4`);
+      triggerFeedback('MP4 SAVED');
+      return;
+    }
+
+    try{
+      triggerFeedback('CONVERTING MP4');
+      const mp4Blob=await convertBlobToMP4(rawBlob);
+      downloadBlob(mp4Blob,`sira_screen_recording_${Date.now()}.mp4`);
+      triggerFeedback('MP4 SAVED');
+    }catch(err){
+      console.error(err);
+      alert('MP4 conversion failed. This browser blocked the MP4 converter or it could not load ffmpeg.wasm. Try Chrome/Edge with internet access, or Safari native MP4 recording.');
+    }
   };
 
   recorder.start(250);
   recording=true;
   recordStart=performance.now();
   btn.textContent='Stop';
-  triggerFeedback('REC SCREEN');
+  triggerFeedback(extensionFromMimeType(mimeType)==='mp4'?'REC MP4':'REC → MP4');
 }
 function drawRecordingIndicator(now){
   if(!recording)return;
@@ -537,6 +656,7 @@ function applyEffect(img,e){
   if(e.name==='CRT/RGB')return effectCrtRgb(img,e);
   if(e.name==='NOISE')return effectNoise(img,e);
   if(e.name==='INVERT')return effectInvert(img,e);
+  if(e.name==='RANDOM')return img;
   return img;
 }
 function effectDither(base,e){
@@ -696,7 +816,7 @@ function drawLabels(){
     if(Math.abs(rel)>2)continue;
     const d=Math.abs(rel),isParam=uiMode!=='effects',x=C+rel*(isParam?96:82),y=C+screenR-44-d*10,sz=rel===0?(isParam?18:20):d===1?13:9,alp=rel===0?1:d===1?.65:.28;
     const exists=uiMode==='effects' && findStackIndex(processes[i].name)>=0;
-    textCenter((exists&&rel===0?'EDIT ':'')+names[i],x,y,sz,rel===0?'bold':'normal',rel===0?'#f4df9a':'#d4b860',alp);
+    textCenter((names[i]==='RANDOM'&&rel===0?'MAKE ':'')+(exists&&rel===0?'EDIT ':'')+names[i],x,y,sz,rel===0?'bold':'normal',rel===0?'#f4df9a':'#d4b860',alp);
   }
 
   ctx.beginPath();
@@ -797,6 +917,10 @@ function rotateDial(direction,step=1){
 }
 function centerPress(){
   if(uiMode==='effects'){
+    if(cp().name==='RANDOM'){
+      randomRecipe();
+      return;
+    }
     draft=getEditableEffect(cp());
     paramIndex=0;
     uiMode='params';
@@ -849,7 +973,39 @@ document.getElementById('resetBtn').onclick=resetAll;
 document.getElementById('saveBtn').onclick=saveHighResolutionCirclePNG;
 document.getElementById('recordBtn').onclick=toggleRecording;
 document.getElementById('freezeBtn').onclick=()=>{if(liveMode){updateLiveSource();frozen=!frozen;showOverlay(900)}};
-document.getElementById('cameraBtn').onclick=async()=>{try{if(!liveMode){liveStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720},facingMode:'environment'},audio:false});video.srcObject=liveStream;liveMode=true;frozen=false;showOverlay(1100)}else{liveStream?.getTracks().forEach(t=>t.stop());liveStream=null;liveMode=false;frozen=false;showOverlay(900)}}catch(err){alert('Camera failed. Use HTTPS/localhost or mobile browser permissions.')}};
+async function startCamera(){
+  try{
+    liveStream?.getTracks().forEach(t=>t.stop());
+    liveStream=await navigator.mediaDevices.getUserMedia({
+      video:{width:{ideal:1280},height:{ideal:720},facingMode:{ideal:cameraFacing}},
+      audio:false
+    });
+    video.srcObject=liveStream;
+    liveMode=true;
+    frozen=false;
+    document.getElementById('frontCamBtn').textContent=cameraFacing==='user'?'Back Cam':'Front Cam';
+    showOverlay(1100);
+  }catch(err){
+    alert('Camera failed. Use HTTPS/localhost or mobile browser permissions.');
+  }
+}
+document.getElementById('cameraBtn').onclick=async()=>{
+  if(!liveMode){
+    await startCamera();
+  }else{
+    liveStream?.getTracks().forEach(t=>t.stop());
+    liveStream=null;
+    liveMode=false;
+    frozen=false;
+    showOverlay(900);
+  }
+};
+document.getElementById('frontCamBtn').onclick=async()=>{
+  cameraFacing = cameraFacing==='user' ? 'environment' : 'user';
+  document.getElementById('frontCamBtn').textContent=cameraFacing==='user'?'Back Cam':'Front Cam';
+  if(liveMode) await startCamera();
+  else triggerFeedback(cameraFacing==='user'?'FRONT CAMERA':'BACK CAMERA');
+};
 fileInput.addEventListener('change',()=>{const file=fileInput.files[0];if(!file)return;if(liveMode){liveStream?.getTracks().forEach(t=>t.stop());liveStream=null;liveMode=false;frozen=false}const img=new Image();img.onload=()=>{sourceCanvas.width=img.width;sourceCanvas.height=img.height;sourceCtx.drawImage(img,0,0);showOverlay(900);URL.revokeObjectURL(img.src)};img.src=URL.createObjectURL(file)});
 document.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();centerPress()}if(e.key==='Escape'||e.key==='Backspace'){e.preventDefault();longPress()}if(e.key.toLowerCase()==='r')resetAll();if(e.key.toLowerCase()==='o')fileInput.click()});
 createDefaultImage();drawFrame();
