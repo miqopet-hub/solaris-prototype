@@ -2,833 +2,744 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Sira CCD Prototype</title>
+<title>Sira ESP-P4 Fidelity Simulator</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
-  * { box-sizing: border-box; }
-  body { margin:0; min-height:100vh; background:radial-gradient(circle at center,#101010 0%,#020202 82%); color:#fff3cf; font-family:Arial,Helvetica,sans-serif; display:grid; place-items:center; overflow:hidden; }
-  .app { width:min(92vw,760px); height:min(92vw,760px); max-height:92vh; aspect-ratio:1/1; position:relative; user-select:none; }
-  canvas { width:100%; height:100%; display:block; border-radius:50%; }
-  video { display:none; }
-  .toolbar { position:fixed; left:16px; bottom:16px; right:16px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
-  button,label { background:rgba(15,13,9,.66); color:#f3d88c; border:1px solid rgba(218,166,75,.34); padding:10px 14px; border-radius:999px; cursor:pointer; backdrop-filter:blur(8px); font-size:14px; }
-  button:hover,label:hover { background:rgba(255,255,255,.16); }
-  input[type=file] { display:none; }
-  .hint { position:fixed; top:14px; left:14px; right:14px; text-align:center; color:rgba(255,243,207,.75); font-size:13px; pointer-events:none; }
-
-  @media (max-width: 700px) {
-    .hint {
-      font-size: 11px;
-      top: max(8px, env(safe-area-inset-top));
-      padding: 0 14px;
-    }
-    .app {
-      width: min(104vw, 104vh);
-      height: min(104vw, 104vh);
-      transform: translateY(-18px);
-    }
-    .toolbar {
-      bottom: max(8px, env(safe-area-inset-bottom));
-      gap: 6px;
-    }
-    button, label {
-      font-size: 12px;
-      padding: 8px 10px;
-    }
-  }
-
-
-  html, body, canvas, .app {
-    -webkit-user-select: none;
-    user-select: none;
-    -webkit-touch-callout: none;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: none;
-  }
-
-
-  .dialTextLayer {
-    display: none;
-  }
-  .dialTextItem {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform-origin: center;
-    color: #f5ead0;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-align: center;
-    white-space: nowrap;
-    font-size: 15px;
-    opacity: 0;
-    filter: blur(1px);
-    text-shadow: 0 2px 9px rgba(0,0,0,0.95);
-    transition:
-      transform 190ms cubic-bezier(.2,.8,.2,1),
-      opacity 190ms cubic-bezier(.2,.8,.2,1),
-      filter 190ms cubic-bezier(.2,.8,.2,1),
-      color 190ms cubic-bezier(.2,.8,.2,1),
-      font-size 190ms cubic-bezier(.2,.8,.2,1);
-  }
-  .dialTextItem.selected {
-    color: #f0b64f;
-    opacity: 1;
-    filter: blur(0px);
-    font-size: 22px;
-  }
-  .dialTextItem.near {
-    opacity: 0.46;
-    filter: blur(0.7px);
-  }
-  .dialTextItem.far {
-    opacity: 0.16;
-    filter: blur(1.7px);
-  }
-
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#030303;color:#f3d88c;font-family:Arial,Helvetica,sans-serif;touch-action:none;-webkit-user-select:none;user-select:none}
+body{display:grid;place-items:center}
+#screen{width:min(100vmin,900px);height:min(100vmin,900px);display:block;touch-action:none;cursor:pointer}
+#video{display:none}
+.hint{position:fixed;top:max(10px,env(safe-area-inset-top));left:10px;right:10px;text-align:center;color:rgba(240,210,140,.66);font-size:12px;letter-spacing:.04em;pointer-events:none;text-shadow:0 2px 10px #000}
+.toolbar{position:fixed;left:10px;right:10px;bottom:max(10px,env(safe-area-inset-bottom));display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap}
+button,label,select{background:rgba(14,12,8,.72);color:#f3d88c;border:1px solid rgba(218,166,75,.34);border-radius:999px;padding:8px 11px;font-size:12px;backdrop-filter:blur(8px);cursor:pointer}
+input[type=file]{display:none}
+.badge{position:fixed;right:12px;top:max(36px,calc(env(safe-area-inset-top) + 28px));font-size:11px;color:rgba(240,210,140,.72);background:rgba(0,0,0,.45);border:1px solid rgba(218,166,75,.25);border-radius:999px;padding:7px 10px;pointer-events:none}
+@media(max-width:700px){#screen{width:104vmin;height:104vmin;transform:translateY(-16px)}.toolbar{gap:5px}button,label,select{font-size:11px;padding:7px 9px}.hint{font-size:11px}}
 </style>
 </head>
 <body>
-<div class="hint">Sira · drag/scroll ring · tap screen · long press back/reset</div>
-<main class="app"><canvas id="screen" width="900" height="900"></canvas><div id="dialTextLayer" class="dialTextLayer"></div><video id="video" autoplay playsinline muted></video></main>
+<div class="hint">ESP-P4 SIM · preview 160/240/320 · save 1000 true redraw · slow 1 / fast 5 / faster 10</div>
+<canvas id="screen" width="900" height="900"></canvas>
+<video id="video" autoplay playsinline muted></video>
+<div class="badge" id="perf">ESP 240 · -- ms</div>
 <div class="toolbar">
-<label>Upload photo<input id="fileInput" type="file" accept="image/*"></label>
-<button id="cameraBtn">Start Webcam</button><button id="captureBtn">Freeze Frame</button><button id="modeBtn">Press Center</button><button id="mutateBtn">Mutate</button><button id="backBtn">Back to Effects</button><button id="saveBtn">Save PNG</button><button id="resetBtn">Reset Param</button>
+  <label>Upload<input id="fileInput" type="file" accept="image/*"></label>
+  <button id="cameraBtn">Camera</button>
+  <button id="freezeBtn">Freeze</button>
+  <select id="resSel" title="Internal processing resolution">
+    <option value="160">160</option>
+    <option value="240" selected>240</option>
+    <option value="320">320</option>
+  </select>
+  <button id="rgb565Btn">RGB565 ON</button>
+  <button id="resetBtn">Reset</button>
+  <button id="saveBtn">Save 1000 PNG</button>
 </div>
+
 <script>
-const canvas=document.getElementById('screen'),ctx=canvas.getContext('2d',{willReadFrequently:true}),fileInput=document.getElementById('fileInput'),video=document.getElementById('video');
-const W=900,H=900,C=450,imageDiameter=500;let sourceCanvas=document.createElement('canvas'),sourceCtx=sourceCanvas.getContext('2d',{willReadFrequently:true});let liveMode=false,liveStream=null,frozen=false;
+const canvas = document.getElementById('screen');
+const ctx = canvas.getContext('2d', { willReadFrequently:true });
+const video = document.getElementById('video');
+const fileInput = document.getElementById('fileInput');
+const W=900,H=900,C=450,screenR=250;
+let P = 240;
+let simulateRGB565 = true;
+let sourceCanvas = document.createElement('canvas');
+let sourceCtx = sourceCanvas.getContext('2d',{willReadFrequently:true});
+let liveMode=false, liveStream=null, frozen=false;
+let processIndex=0, paramIndex=0, uiMode='effects';
+let stack=[], draft=null;
+let dialRotation=0, targetDialRot=0;
+let overlayUntil=0, lastWheelTime=0, holdTimer=null, suppressClick=false, holdStart=0, holdDuration=760, holdLabel='', shakeUntil=0, feedbackMsg='', feedbackUntil=0, resetFlashUntil=0;
+let grainSeed=12345, noiseSeed=67890;
+let lastFrameMS=0, lastFpsUpdate=0;
+
 const processes=[
-{name:'RANDOM',random:true,active:false,params:[]},
-{name:'DITHER',active:false,params:[{name:'AMOUNT',value:50,def:50,min:0,max:100},{name:'COLOR',value:0,def:0,min:0,max:10},{name:'DIFFUSE',value:50,def:50,min:0,max:100}]},
-{name:'HALFTONE',active:false,params:[{name:'SIZE',value:50,def:50,min:0,max:100},{name:'PLATES',value:0,def:0,min:0,max:10},{name:'ANGLE',value:50,def:50,min:0,max:100}]},
-{name:'POSTERIZE',active:false,params:[{name:'LEVELS',value:50,def:50,min:0,max:100},{name:'PALETTE',value:0,def:0,min:0,max:100},{name:'EDGE',value:0,def:0,min:0,max:100}]},
-{name:'RGB',active:false,params:[{name:'H-SPLIT',value:50,def:50,min:0,max:100},{name:'V-SPLIT',value:50,def:50,min:0,max:100}]},
-{name:'CRT',active:false,params:[{name:'GLITCH',value:50,def:50,min:0,max:100},{name:'MASK',value:50,def:50,min:0,max:100},{name:'SCAN',value:50,def:50,min:0,max:100},{name:'GLOW',value:50,def:50,min:0,max:100}]},
-{name:'TEXTURE',active:false,params:[{name:'GRAIN',value:50,def:50,min:0,max:100},{name:'COLOR NOISE',value:50,def:50,min:0,max:100}]},
-{name:'INVERT',active:false,params:[{name:'MIX',value:50,def:50,min:0,max:100},{name:'CURVE',value:50,def:50,min:0,max:100}]}
+  {name:'DITHER',params:[
+    {name:'AMOUNT',value:50,def:50,min:0,max:100,step:1},
+    {name:'COLOR',value:0,def:0,min:0,max:10,step:1},
+    {name:'DIFFUSE',value:50,def:50,min:0,max:100,step:1}
+  ]},
+  {name:'HALFTONE',params:[
+    {name:'SIZE',value:50,def:50,min:0,max:100,step:1},
+    {name:'ANGLE',value:50,def:50,min:0,max:100,step:1},
+    {name:'PALETTE',value:0,def:0,min:0,max:10,step:1}
+  ]},
+  {name:'POSTERIZE',params:[
+    {name:'LEVELS',value:50,def:50,min:0,max:100,step:1},
+    {name:'PALETTE',value:0,def:0,min:0,max:100,step:1}
+  ]},
+  {name:'CRT/RGB',params:[
+    {name:'SPLIT',value:50,def:50,min:0,max:100,step:1},
+    {name:'SCAN',value:50,def:50,min:0,max:100,step:1}
+  ]},
+  {name:'NOISE',params:[
+    {name:'B&W',value:50,def:50,min:0,max:100,step:1},
+    {name:'COLOR',value:50,def:50,min:0,max:100,step:1}
+  ]},
+  {name:'INVERT',params:[
+    {name:'MIX',value:50,def:50,min:0,max:100,step:1}
+  ]}
 ];
-let processIndex=0,paramIndex=0,uiMode=0,lastWheelTime=0,overlayUntil=0,grainSeed=12345,noiseSeed=67890,mutateTimer=null,holdTimer=null,suppressClick=false,dialRotation=0,targetDialRot=0,frameRAF=null;
-function clamp(v,a,b){return Math.max(a,Math.min(b,v))}function cp(){return processes[processIndex]}function cpar(){return cp().params[paramIndex]}function pv(p,n){let pr=processes.find(x=>x.name===p);let pa=pr&&pr.params.find(x=>x.name===n);return pa?pa.value:0}function rnd(s){s.value=(s.value*16807)%2147483647;return(s.value-1)/2147483646}function showOverlay(ms=950){overlayUntil=performance.now()+ms}function scheduleFrame(){if(frameRAF==null){frameRAF=requestAnimationFrame(()=>{frameRAF=null;drawFrame()})}}
-function createDefaultImage(){sourceCanvas.width=900;sourceCanvas.height=900;let g=sourceCtx.createLinearGradient(0,0,0,900);g.addColorStop(0,'#d9c9a3');g.addColorStop(.45,'#8c8165');g.addColorStop(1,'#28342d');sourceCtx.fillStyle=g;sourceCtx.fillRect(0,0,900,900);function m(base,color,phase){sourceCtx.beginPath();sourceCtx.moveTo(0,900);for(let x=0;x<=960;x+=60){let y=base+Math.sin(x*.015+phase)*55+Math.sin(x*.041)*25;sourceCtx.lineTo(x,y)}sourceCtx.lineTo(900,900);sourceCtx.closePath();sourceCtx.fillStyle=color;sourceCtx.fill()}m(440,'#65604e',.2);m(560,'#444b3d',1.5);m(690,'#252d25',2.4);sourceCtx.fillStyle='rgba(255,240,180,.8)';sourceCtx.beginPath();sourceCtx.arc(650,250,55,0,Math.PI*2);sourceCtx.fill()}
-function updateLiveSource(){if(!liveMode||frozen||video.readyState<2)return;sourceCanvas.width=video.videoWidth||900;sourceCanvas.height=video.videoHeight||900;sourceCtx.drawImage(video,0,0,sourceCanvas.width,sourceCanvas.height)}
-function fitSource(){updateLiveSource();let t=document.createElement('canvas');t.width=t.height=imageDiameter;let tc=t.getContext('2d',{willReadFrequently:true});let sw=sourceCanvas.width,sh=sourceCanvas.height,side=Math.min(sw,sh),sx=(sw-side)/2,sy=(sh-side)/2;tc.drawImage(sourceCanvas,sx,sy,side,side,0,0,imageDiameter,imageDiameter);return t}
-function applyProcess(img,n){if(n==='DITHER')return effectDither(img);if(n==='HALFTONE')return effectHalftone(img);if(n==='POSTERIZE')return effectPosterize(img);if(n==='RGB')return effectRGB(img);if(n==='CRT')return effectCRT(img);if(n==='TEXTURE')return effectTexture(img);if(n==='INVERT')return effectInvert(img);return img}
-function applyCCDBase(base){
-  const c=document.createElement('canvas');
-  c.width=imageDiameter;c.height=imageDiameter;
+
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function cp(){return processes[processIndex]}
+function cpar(){return cp().params[paramIndex]}
+function showOverlay(ms=850){overlayUntil=performance.now()+ms}
+function rnd(s){s.value=(s.value*16807)%2147483647;return(s.value-1)/2147483646}
+function makeCanvas(w,h=w){let c=document.createElement('canvas');c.width=w;c.height=h;return c}
+function cloneParams(params){return params.map(p=>({name:p.name,value:p.value,def:p.def,min:p.min,max:p.max,step:p.step}))}
+function neutralEffect(proc){return {name:proc.name,params:cloneParams(proc.params)}}
+function cloneEntry(e){return {name:e.name,params:cloneParams(e.params)}}
+function findStackIndex(name){return stack.findIndex(e=>e.name===name)}
+function getEditableEffect(proc){
+  const idx=findStackIndex(proc.name);
+  if(idx>=0){
+    const e=cloneEntry(stack[idx]);
+    e.editIndex=idx;
+    return e;
+  }
+  const e=neutralEffect(proc);
+  e.editIndex=-1;
+  return e;
+}
+function upsertDraftToStack(){
+  if(!draft) return true;
+  const entry={name:draft.name,params:cloneParams(draft.params)};
+  const existing=findStackIndex(entry.name);
+
+  if(existing>=0){
+    stack[existing]=entry;
+    draft=cloneEntry(entry);
+    draft.editIndex=existing;
+    return true;
+  }
+
+  if(stack.length>=3){
+    triggerFeedback('MAX 3 EFFECTS');
+    return false;
+  }
+
+  stack.push(entry);
+  draft=cloneEntry(entry);
+  draft.editIndex=stack.length-1;
+  return true;
+}
+
+function paramValue(entry,name){const p=entry.params.find(x=>x.name===name);return p?p.value:0}
+function setParamValue(entry,name,v){const p=entry.params.find(x=>x.name===name);if(p)p.value=clamp(v,p.min,p.max)}
+function currentParamFromDraft(){if(!draft)draft=getEditableEffect(cp());return draft.params[paramIndex]||draft.params[0]}
+
+function triggerFeedback(msg='STACK MAX 3'){
+  feedbackMsg=msg;
+  feedbackUntil=performance.now()+900;
+  shakeUntil=performance.now()+360;
+  try{ if(navigator.vibrate) navigator.vibrate([35,35,35]); }catch(e){}
+  try{
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(AC){
+      const ac=new AC();
+      const o=ac.createOscillator();
+      const g=ac.createGain();
+      o.type='triangle';
+      o.frequency.value=160;
+      g.gain.value=.045;
+      o.connect(g);
+      g.connect(ac.destination);
+      o.start();
+      o.frequency.setValueAtTime(120,ac.currentTime+.07);
+      g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.16);
+      o.stop(ac.currentTime+.17);
+    }
+  }catch(e){}
+}
+function startHoldVisual(){
+  holdStart=performance.now();
+  holdLabel=uiMode==='effects'?'HOLD RESET':'HOLD CANCEL';
+}
+function stopHoldVisual(){holdStart=0;holdLabel=''}
+function drawHoldProgress(now){
+  if(!holdStart)return;
+  const p=clamp((now-holdStart)/holdDuration,0,1);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(C,C,screenR+22,-Math.PI/2,-Math.PI/2+Math.PI*2*p);
+  ctx.strokeStyle=uiMode==='effects'?'rgba(255,90,55,.88)':'rgba(240,210,90,.88)';
+  ctx.lineWidth=6;
+  ctx.lineCap='round';
+  ctx.shadowColor='rgba(0,0,0,.9)';
+  ctx.shadowBlur=10;
+  ctx.stroke();
+  ctx.restore();
+  textCenter(holdLabel,C,C-screenR-34,13,'bold',uiMode==='effects'?'#ffb198':'#f7e7a8',.95);
+}
+function drawFeedback(now){
+  if(now<feedbackUntil){
+    const a=clamp((feedbackUntil-now)/300,0,1);
+    textCenter(feedbackMsg,C,C-screenR-58,18,'bold','#ffd06f',a);
+  }
+  if(now<resetFlashUntil){
+    const a=clamp((resetFlashUntil-now)/500,0,1);
+    ctx.save();
+    ctx.globalAlpha=a*.35;
+    ctx.beginPath();
+    ctx.arc(C,C,screenR+10,0,Math.PI*2);
+    ctx.strokeStyle='#ff7448';
+    ctx.lineWidth=10;
+    ctx.stroke();
+    ctx.restore();
+    textCenter('FACTORY RESET',C,C,24,'bold','#ffd2bd',a);
+  }
+}
+function processImageAt(renderSize, useRGB565){
+  const oldP=P, oldRGB=simulateRGB565;
+  P=renderSize;
+  simulateRGB565=!!useRGB565;
+  const img=processImage();
+  P=oldP;
+  simulateRGB565=oldRGB;
+  return img;
+}
+function fitSourceToSize(size){
+  updateLiveSource();
+  const c=makeCanvas(size);
   const cx=c.getContext('2d',{willReadFrequently:true});
-  cx.drawImage(base,0,0);
-
-  let id=cx.getImageData(0,0,imageDiameter,imageDiameter);
-  let d=id.data;
-  let seed={value:24681357};
-
-  for(let i=0;i<d.length;i+=4){
-    let r=d[i],g=d[i+1],b=d[i+2];
-    let lum=r*.299+g*.587+b*.114;
-
-    r=r*1.025+2;
-    g=g*1.005;
-    b=b*.975;
-
-    if(lum>205){
-      let k=(lum-205)/50;
-      r=r*(1-k*.035)+255*(k*.035);
-      g=g*(1-k*.025)+255*(k*.025);
-      b=b*(1-k*.015)+255*(k*.015);
-    }
-
-    let n=(rnd(seed)-.5)*5.5;
-    d[i]=clamp(r+n,0,255);
-    d[i+1]=clamp(g+n,0,255);
-    d[i+2]=clamp(b+n,0,255);
-  }
-  cx.putImageData(id,0,0);
-
-  const bloom=document.createElement('canvas');
-  bloom.width=imageDiameter;bloom.height=imageDiameter;
-  const bx=bloom.getContext('2d',{willReadFrequently:true});
-  bx.drawImage(c,0,0);
-  let bid=bx.getImageData(0,0,imageDiameter,imageDiameter);
-  let bd=bid.data;
-  for(let i=0;i<bd.length;i+=4){
-    let lum=bd[i]*.299+bd[i+1]*.587+bd[i+2]*.114;
-    if(lum<205){bd[i]=bd[i+1]=bd[i+2]=0;bd[i+3]=0}
-    else{bd[i+3]=clamp((lum-205)/50,0,1)*90}
-  }
-  bx.putImageData(bid,0,0);
-
-  const out=document.createElement('canvas');
-  out.width=imageDiameter;out.height=imageDiameter;
-  const ox=out.getContext('2d',{willReadFrequently:true});
-  ox.drawImage(c,0,0);
-  ox.globalAlpha=.28;
-  ox.filter='blur(7px)';
-  ox.drawImage(bloom,0,0);
-  ox.filter='none';
-  ox.globalAlpha=1;
-
-  let oid=ox.getImageData(0,0,imageDiameter,imageDiameter);
-  let od=oid.data;
-  for(let x=0;x<imageDiameter;x++){
-    let bright=0;
-    for(let y=0;y<imageDiameter;y++){
-      let i=(y*imageDiameter+x)*4;
-      let lum=od[i]*.299+od[i+1]*.587+od[i+2]*.114;
-      if(lum>238)bright+=(lum-238)/17;
-    }
-    if(bright>0){
-      let smear=clamp(bright*.018,0,9);
-      for(let y=0;y<imageDiameter;y++){
-        let i=(y*imageDiameter+x)*4;
-        od[i]=clamp(od[i]+smear*.9,0,255);
-        od[i+1]=clamp(od[i+1]+smear*.8,0,255);
-        od[i+2]=clamp(od[i+2]+smear*.65,0,255);
-      }
-    }
-  }
-  ox.putImageData(oid,0,0);
+  const sw=sourceCanvas.width, sh=sourceCanvas.height;
+  const side=Math.min(sw,sh), sx=(sw-side)/2, sy=(sh-side)/2;
+  cx.imageSmoothingEnabled=true;
+  cx.imageSmoothingQuality='high';
+  cx.drawImage(sourceCanvas,sx,sy,side,side,0,0,size,size);
+  return c;
+}
+function applyCCDBaseForSize(base,size){
+  const oldP=P;
+  P=size;
+  const out=applyCCDBase(base);
+  P=oldP;
   return out;
 }
+function effectDitherExport(base,e,outSize,logicalGrid){
+  const oldP=P;
+  const low=makeCanvas(logicalGrid);
+  const lx=low.getContext('2d',{willReadFrequently:true});
+  lx.imageSmoothingEnabled=true;
+  lx.imageSmoothingQuality='high';
+  lx.drawImage(base,0,0,logicalGrid,logicalGrid);
 
-function processImage(){let img=applyCCDBase(fitSource()),any=false;for(let i=0;i<processes.length;i++){if(processes[i].random)continue;if(processes[i].random)continue;if(processes[i].active||(i===processIndex&&uiMode>0)){any=true;img=applyProcess(img,processes[i].name)}}return img}
-function applyColorSteps(img,steps){if(steps<=0)return img;let c=document.createElement('canvas');c.width=c.height=imageDiameter;let cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(img,0,0);let id=cx.getImageData(0,0,imageDiameter,imageDiameter),d=id.data,levels=Math.max(2,steps+1);for(let i=0;i<d.length;i+=4){d[i]=Math.round(d[i]/255*(levels-1))*(255/(levels-1));d[i+1]=Math.round(d[i+1]/255*(levels-1))*(255/(levels-1));d[i+2]=Math.round(d[i+2]/255*(levels-1))*(255/(levels-1))}cx.putImageData(id,0,0);return c}
-function effectDither(base){let amount=pv('DITHER','AMOUNT'),steps=Math.round(pv('DITHER','COLOR')),diff=pv('DITHER','DIFFUSE');if(amount<=0)return applyColorSteps(base,steps);let small=document.createElement('canvas');small.width=small.height=128;let sx=small.getContext('2d',{willReadFrequently:true});sx.drawImage(base,0,0,128,128);let img=sx.getImageData(0,0,128,128),d=img.data,str=amount/100*diff/100;if(steps>0){let levels=Math.max(2,steps+1),arr=new Float32Array(d.length);for(let i=0;i<d.length;i++)arr[i]=d[i];for(let y=0;y<127;y++)for(let x=1;x<127;x++)for(let c=0;c<3;c++){let idx=(y*128+x)*4+c,old=arr[idx],neu=Math.round(old/255*(levels-1))*(255/(levels-1)),err=(old-neu)*str;arr[idx]=neu;arr[idx+4]+=err*7/16;arr[idx+127*4]+=err*3/16;arr[idx+128*4]+=err*5/16;arr[idx+129*4]+=err/16}for(let i=0;i<d.length;i+=4){d[i]=clamp(arr[i],0,255);d[i+1]=clamp(arr[i+1],0,255);d[i+2]=clamp(arr[i+2],0,255)}}else{let gray=new Float32Array(128*128);for(let i=0,j=0;i<d.length;i+=4,j++)gray[j]=d[i]*.299+d[i+1]*.587+d[i+2]*.114;for(let y=0;y<127;y++)for(let x=1;x<127;x++){let idx=y*128+x,old=gray[idx],neu=old>127?255:0,err=(old-neu)*str;gray[idx]=neu;gray[idx+1]+=err*7/16;gray[idx+127]+=err*3/16;gray[idx+128]+=err*5/16;gray[idx+129]+=err/16}for(let i=0,j=0;i<d.length;i+=4,j++){let v=clamp(gray[j],0,255);d[i]=d[i+1]=d[i+2]=v}}sx.putImageData(img,0,0);let out=document.createElement('canvas');out.width=out.height=imageDiameter;let ox=out.getContext('2d');ox.imageSmoothingEnabled=false;ox.drawImage(small,0,0,imageDiameter,imageDiameter);return out}
-function effectHalftone(base){let size=pv('HALFTONE','SIZE'),plates=Math.round(pv('HALFTONE','PLATES')),angle=(pv('HALFTONE','ANGLE')-50)/50*Math.PI/6;if(size<=0)return applyColorSteps(base,plates);let dot=Math.round(3+size/100*17),out=document.createElement('canvas');out.width=out.height=imageDiameter;let ox=out.getContext('2d');ox.fillStyle='#e8dec8';ox.fillRect(0,0,imageDiameter,imageDiameter);let s=document.createElement('canvas');s.width=s.height=imageDiameter;let sc=s.getContext('2d',{willReadFrequently:true});sc.drawImage(base,0,0);let data=sc.getImageData(0,0,imageDiameter,imageDiameter).data,cols=[[0,0,0],[220,40,40],[40,120,230],[240,190,20],[20,170,110],[190,60,210],[255,120,40],[70,70,70],[30,200,220],[180,120,70]],active=Math.max(1,plates||1);for(let y=-imageDiameter;y<imageDiameter*2;y+=dot)for(let x=-imageDiameter;x<imageDiameter*2;x+=dot){let rx=Math.round((x-C)*Math.cos(angle)-(y-C)*Math.sin(angle)+C),ry=Math.round((x-C)*Math.sin(angle)+(y-C)*Math.cos(angle)+C);if(rx<0||rx>=imageDiameter||ry<0||ry>=imageDiameter)continue;let i=(ry*imageDiameter+rx)*4,r=data[i],g=data[i+1],b=data[i+2],lum=r*.299+g*.587+b*.114,rad=(1-lum/255)*dot*.50,fill='#1a1713';if(plates>0){let pi=Math.floor(((r+g*2+b*3)/255)*active)%Math.min(active,cols.length),co=cols[pi];fill=`rgb(${co[0]},${co[1]},${co[2]})`;ox.globalAlpha=.72}ox.beginPath();ox.arc(rx,ry,rad,0,Math.PI*2);ox.fillStyle=fill;ox.fill();ox.globalAlpha=1}return out}
-function effectPosterize(base){let lev=pv('POSTERIZE','LEVELS'),pal=pv('POSTERIZE','PALETTE'),edge=pv('POSTERIZE','EDGE');if(lev<=0&&pal<=0&&edge<=0)return base;let levels=Math.round(24-lev/100*22),c=document.createElement('canvas');c.width=c.height=imageDiameter;let cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(base,0,0);let img=cx.getImageData(0,0,imageDiameter,imageDiameter),d=img.data,orig=new Uint8ClampedArray(d);for(let i=0;i<d.length;i+=4){let r=d[i],g=d[i+1],b=d[i+2];if(lev>0){r=Math.floor(r/256*levels)*(255/Math.max(1,levels-1));g=Math.floor(g/256*levels)*(255/Math.max(1,levels-1));b=Math.floor(b/256*levels)*(255/Math.max(1,levels-1))}let ps=pal/100,warm=(i/4)%2<1,tr=warm?r*1.18+12:r*.75,tg=warm?g*.92:g*.95+8,tb=warm?b*.72:b*1.2+10;d[i]=clamp(r*(1-ps)+tr*ps,0,255);d[i+1]=clamp(g*(1-ps)+tg*ps,0,255);d[i+2]=clamp(b*(1-ps)+tb*ps,0,255)}if(edge>0){let eh=edge/100;for(let y=1;y<imageDiameter-1;y++)for(let x=1;x<imageDiameter-1;x++){let i=(y*imageDiameter+x)*4,il=(y*imageDiameter+x-1)*4,ir=(y*imageDiameter+x+1)*4,iu=((y-1)*imageDiameter+x)*4,id=((y+1)*imageDiameter+x)*4,e=Math.abs(orig[il]-orig[ir])+Math.abs(orig[iu]-orig[id]);if(e>55){d[i]=d[i]*(1-eh)+orig[i]*eh;d[i+1]=d[i+1]*(1-eh)+orig[i+1]*eh;d[i+2]=d[i+2]*(1-eh)+orig[i+2]*eh}}}cx.putImageData(img,0,0);return c}
-function effectRGB(base){let h=Math.round(pv('RGB','H-SPLIT')/100*24),v=Math.round(pv('RGB','V-SPLIT')/100*24);if(h<=0&&v<=0)return base;let c=document.createElement('canvas');c.width=c.height=imageDiameter;let cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(base,0,0);let src=cx.getImageData(0,0,imageDiameter,imageDiameter),out=cx.createImageData(imageDiameter,imageDiameter);for(let y=0;y<imageDiameter;y++)for(let x=0;x<imageDiameter;x++){let i=(y*imageDiameter+x)*4,xr=clamp(x+h,0,imageDiameter-1),yr=clamp(y+v,0,imageDiameter-1),xb=clamp(x-h,0,imageDiameter-1),yb=clamp(y-v,0,imageDiameter-1),ir=(yr*imageDiameter+xr)*4,ib=(yb*imageDiameter+xb)*4;out.data[i]=src.data[ir];out.data[i+1]=src.data[i+1];out.data[i+2]=src.data[ib+2];out.data[i+3]=255}cx.putImageData(out,0,0);return c}
-function effectCRT(base){let glitch=pv('CRT','GLITCH'),mask=pv('CRT','MASK'),scan=pv('CRT','SCAN'),glow=pv('CRT','GLOW');if(glitch<=0&&mask<=0&&scan<=0&&glow<=0)return base;let c=document.createElement('canvas');c.width=c.height=imageDiameter;let cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(base,0,0);let img=cx.getImageData(0,0,imageDiameter,imageDiameter),d=img.data,src=new Uint8ClampedArray(d),g=glitch/100;for(let y=0;y<imageDiameter;y++){let band=Math.floor(y/9),shift=Math.round(Math.sin(band*2.7)*g*18+(band%11===0?g*34:0)),drop=(band%17===0)?g*.55:0;for(let x=0;x<imageDiameter;x++){let sx=clamp(x+shift,0,imageDiameter-1),i=(y*imageDiameter+x)*4,si=(y*imageDiameter+sx)*4;d[i]=src[si]*(1-drop);d[i+1]=src[si+1]*(1-drop);d[i+2]=src[si+2]*(1-drop)}}for(let y=0;y<imageDiameter;y++){let sm=(y%4<2)?(1-scan/100*.45):1;for(let x=0;x<imageDiameter;x++){let i=(y*imageDiameter+x)*4,phase=x%3,m=mask/100*.28,rm=1,gm=1,bm=1;if(phase===0){rm+=m;gm-=m*.4;bm-=m*.4}if(phase===1){gm+=m;rm-=m*.4;bm-=m*.4}if(phase===2){bm+=m;rm-=m*.4;gm-=m*.4}d[i]=clamp(d[i]*sm*rm,0,255);d[i+1]=clamp(d[i+1]*sm*gm,0,255);d[i+2]=clamp(d[i+2]*sm*bm,0,255)}}cx.putImageData(img,0,0);let out=document.createElement('canvas');out.width=out.height=imageDiameter;let ox=out.getContext('2d');ox.drawImage(c,0,0);let ga=glow/100;ox.globalCompositeOperation='screen';ox.globalAlpha=ga*.8;ox.filter='blur(10px) saturate(1.6) brightness(1.25)';ox.drawImage(c,0,0);ox.globalCompositeOperation='lighter';ox.globalAlpha=ga*.28;ox.filter='blur(24px)';ox.drawImage(c,0,0);ox.filter='none';ox.globalCompositeOperation='source-over';ox.globalAlpha=1;return out}
-function effectTexture(base){let grain=pv('TEXTURE','GRAIN'),cn=pv('TEXTURE','COLOR NOISE');if(grain<=0&&cn<=0)return base;let c=document.createElement('canvas');c.width=c.height=imageDiameter;let cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(base,0,0);let img=cx.getImageData(0,0,imageDiameter,imageDiameter),d=img.data,sg={value:grainSeed},sn={value:noiseSeed};for(let i=0;i<d.length;i+=4){let lg=(rnd(sg)-.5)*grain*1.1;d[i]=clamp(d[i]+lg+(rnd(sn)-.5)*cn*1.2,0,255);d[i+1]=clamp(d[i+1]+lg+(rnd(sn)-.5)*cn*1.2,0,255);d[i+2]=clamp(d[i+2]+lg+(rnd(sn)-.5)*cn*1.2,0,255)}cx.putImageData(img,0,0);return c}
-function effectInvert(base){let mix=pv('INVERT','MIX'),curve=pv('INVERT','CURVE');if(mix<=0)return base;let mx=mix/100,gamma=2.5-curve/100*2,c=document.createElement('canvas');c.width=c.height=imageDiameter;let cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(base,0,0);let img=cx.getImageData(0,0,imageDiameter,imageDiameter),d=img.data;for(let i=0;i<d.length;i+=4){let lum=(d[i]*.299+d[i+1]*.587+d[i+2]*.114)/255,cm=clamp(Math.pow(lum,gamma)*mx*1.5,0,1);d[i]=d[i]*(1-cm)+(255-d[i])*cm;d[i+1]=d[i+1]*(1-cm)+(255-d[i+1])*cm;d[i+2]=d[i+2]*(1-cm)+(255-d[i+2])*cm}cx.putImageData(img,0,0);return c}
-function textCenter(t,x,y,s,w='normal',col='#fff3cf',a=1){ctx.save();ctx.globalAlpha=a;ctx.fillStyle=col;ctx.font=`${w} ${s}px Arial,Helvetica,sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.shadowColor='rgba(0,0,0,.95)';ctx.shadowBlur=12;ctx.shadowOffsetY=2;ctx.fillText(t,x,y);ctx.restore()}
-function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+  P=logicalGrid;
+  const ditherLow=effectDither(low,e);
+  P=oldP;
 
-let lastDialTextMode = -1;
-let lastDialTextNames = "";
-
-function getDialTextNames(){
-  if(uiMode===0) return processes.map(p=>p.name);
-  return (cp().params || []).map(p=>p.name);
+  const out=makeCanvas(outSize);
+  const ox=out.getContext('2d');
+  ox.imageSmoothingEnabled=false;
+  ox.drawImage(ditherLow,0,0,outSize,outSize);
+  return out;
 }
-function getDialTextSelected(){
-  return uiMode===0 ? processIndex : paramIndex;
-}
-function buildDialTextLayer(){
-  const layer = document.getElementById('dialTextLayer');
-  if(!layer) return;
+function effectHalftoneExport(base,e,outSize,logicalGrid){
+  const size=paramValue(e,'SIZE'),angleValue=paramValue(e,'ANGLE'),plates=Math.round(paramValue(e,'PALETTE'));
+  if(size<=0)return base;
 
-  const names = getDialTextNames();
-  const key = uiMode + ':' + names.join('|');
-  if(key === lastDialTextNames) return;
+  const scale=outSize/logicalGrid;
+  const dotLogical=Math.round(7+size/100*18);
+  const dot=dotLogical*scale;
+  const angle=(angleValue-50)/50*Math.PI/6;
 
-  lastDialTextNames = key;
-  layer.innerHTML = '';
+  const out=makeCanvas(outSize),ox=out.getContext('2d');
+  ox.fillStyle='#e8dec8';
+  ox.fillRect(0,0,outSize,outSize);
 
-  names.forEach((name, i)=>{
-    const el = document.createElement('div');
-    el.className = 'dialTextItem';
-    el.dataset.index = String(i);
-    el.textContent = name;
-    layer.appendChild(el);
-  });
-}
-function updateDialTextLayer(){
-  const layer = document.getElementById('dialTextLayer');
-  if(!layer) return;
+  const sx=base.getContext('2d',{willReadFrequently:true});
+  const data=sx.getImageData(0,0,outSize,outSize).data;
 
-  buildDialTextLayer();
+  const cols=[[0,0,0],[220,40,40],[40,120,230],[240,190,20],[20,170,110],[190,60,210],[255,120,40],[70,70,70],[30,200,220],[180,120,70]];
+  const active=Math.max(1,plates||1),center=logicalGrid/2,ca=Math.cos(angle),sa=Math.sin(angle);
 
-  const names = getDialTextNames();
-  const selected = getDialTextSelected();
-  const n = names.length || 1;
-  const items = layer.querySelectorAll('.dialTextItem');
+  for(let y=-logicalGrid;y<logicalGrid*2;y+=dotLogical){
+    for(let x=-logicalGrid;x<logicalGrid*2;x+=dotLogical){
+      const rx=(x-center)*ca-(y-center)*sa+center;
+      const ry=(x-center)*sa+(y-center)*ca+center;
+      if(rx<0||rx>=logicalGrid||ry<0||ry>=logicalGrid)continue;
 
-  items.forEach(el=>{
-    const i = Number(el.dataset.index);
-    let rel = i - selected;
-    if(rel > n/2) rel -= n;
-    if(rel < -n/2) rel += n;
+      const px=clamp(Math.round(rx*scale),0,outSize-1);
+      const py=clamp(Math.round(ry*scale),0,outSize-1);
+      const i=(py*outSize+px)*4;
+      const r=data[i],g=data[i+1],b=data[i+2];
+      const lum=r*.299+g*.587+b*.114;
+      const rad=Math.max(.8,(1-lum/255)*dotLogical*.56)*scale;
 
-    const dist = Math.abs(rel);
-    const visible = dist <= 2;
+      let fill='#1a1713';
+      if(plates>0){
+        const pi=Math.floor(((r+g*2+b*3)/255)*active)%Math.min(active,cols.length);
+        const co=cols[pi];
+        fill=`rgb(${co[0]},${co[1]},${co[2]})`;
+        ox.globalAlpha=.72;
+      }
 
-    // Position above the image circle, not under the marker.
-    // This is HTML overlay, so it animates safely with CSS.
-    const angle = (-90 + rel * 30) * Math.PI / 180;
-    const radius = 30; // percent of app size
-    const x = Math.cos(angle) * radius;
-    const y = Math.sin(angle) * radius - 3;
-
-    el.classList.remove('selected','near','far');
-    if(i === selected) el.classList.add('selected');
-    else if(dist <= 1.05) el.classList.add('near');
-    else el.classList.add('far');
-
-    el.style.opacity = visible ? '' : '0';
-    el.style.transform =
-      `translate(-50%, -50%) translate(${x}vmin, ${y}vmin) rotate(${rel * 3}deg)`;
-  });
-}
-
-function drawDialLabels(){
-  const names = getDialTextNames();
-  const selected = getDialTextSelected();
-  const n = names.length || 1;
-  const screenR = imageDiameter / 2;
-
-  if(!names.length) return;
-
-  for(let i=0;i<names.length;i++){
-    let rel = i - selected;
-    if(rel > n/2) rel -= n;
-    if(rel < -n/2) rel += n;
-    if(Math.abs(rel) > 2) continue;
-
-    const d = Math.abs(rel);
-    const isParam = uiMode > 0;
-    const x = C + rel * (isParam ? 96 : 82);
-    const y = C + screenR - 44 - d * 10;
-    const sz = rel === 0 ? (isParam ? 18 : 20) : d === 1 ? 13 : 9;
-    const wt = rel === 0 ? 'bold' : 'normal';
-    const alp = rel === 0 ? 1.0 : d === 1 ? 0.65 : 0.28;
-    const col = rel === 0 ? '#f4df9a' : '#d4b860';
-
-    ctx.save();
-    ctx.globalAlpha = alp;
-    ctx.font = `${wt} ${sz}px Arial,Helvetica,sans-serif`;
-    ctx.fillStyle = col;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    if(rel === 0){
-      ctx.shadowColor = 'rgba(0,0,0,.9)';
-      ctx.shadowBlur = 8;
+      ox.beginPath();
+      ox.arc(rx*scale,ry*scale,rad,0,Math.PI*2);
+      ox.fillStyle=fill;
+      ox.fill();
+      ox.globalAlpha=1;
     }
-    ctx.fillText(names[i], x, y);
-    ctx.restore();
+  }
+  return out;
+}
+function effectCrtRgbExport(base,e,outSize,logicalGrid){
+  const split=paramValue(e,'SPLIT'),scan=paramValue(e,'SCAN');
+  if(split<=0&&scan<=0)return base;
+  const scale=outSize/logicalGrid;
+  const h=Math.round(split/100*24*scale);
+  const period=Math.max(1,Math.round(4*scale));
+  const activeLines=Math.max(1,Math.round(2*scale));
+
+  const c=makeCanvas(outSize),cx=c.getContext('2d',{willReadFrequently:true});
+  cx.drawImage(base,0,0);
+  const src=cx.getImageData(0,0,outSize,outSize),out=cx.createImageData(outSize,outSize);
+
+  for(let y=0;y<outSize;y++){
+    const sm=(y%period<activeLines)?(1-scan/100*.45):1;
+    for(let x=0;x<outSize;x++){
+      const i=(y*outSize+x)*4;
+      const xr=clamp(x+h,0,outSize-1),xb=clamp(x-h,0,outSize-1);
+      const ir=(y*outSize+xr)*4,ib=(y*outSize+xb)*4;
+      out.data[i]=clamp(src.data[ir]*sm,0,255);
+      out.data[i+1]=clamp(src.data[i+1]*sm,0,255);
+      out.data[i+2]=clamp(src.data[ib+2]*sm,0,255);
+      out.data[i+3]=255;
+    }
+  }
+  cx.putImageData(out,0,0);
+  return c;
+}
+function effectAtSize(base,e,outSize,logicalGrid){
+  if(e.name==='DITHER')return effectDitherExport(base,e,outSize,logicalGrid);
+  if(e.name==='HALFTONE')return effectHalftoneExport(base,e,outSize,logicalGrid);
+  if(e.name==='CRT/RGB')return effectCrtRgbExport(base,e,outSize,logicalGrid);
+
+  const oldP=P;
+  P=outSize;
+  let out;
+  if(e.name==='POSTERIZE')out=effectPosterize(base,e);
+  else if(e.name==='NOISE')out=effectNoise(base,e);
+  else if(e.name==='INVERT')out=effectInvert(base,e);
+  else out=base;
+  P=oldP;
+  return out;
+}
+function processImageForExport(exportSize=1000,logicalGrid=P){
+  if(liveMode) updateLiveSource();
+
+  let img=applyCCDBaseForSize(fitSourceToSize(exportSize),exportSize);
+
+  for(let i=0;i<stack.length;i++){
+    if(draft && typeof draft.editIndex==='number' && draft.editIndex===i) continue;
+    img=effectAtSize(img,stack[i],exportSize,logicalGrid);
+  }
+  if(draft) img=effectAtSize(img,draft,exportSize,logicalGrid);
+
+  return img;
+}
+function saveHighResolutionCirclePNG(){
+  const lockedP=P;
+  const exportSize=1000;
+
+  // Full high-res output from the original camera/upload source:
+  // preview stays 160/240/320, but save redraws clean geometry/pixel blocks at 1000.
+  const img=processImageForExport(exportSize,lockedP);
+
+  const out=makeCanvas(exportSize);
+  const ox=out.getContext('2d');
+  ox.clearRect(0,0,exportSize,exportSize);
+  ox.save();
+  ox.beginPath();
+  ox.arc(exportSize/2,exportSize/2,exportSize/2,0,Math.PI*2);
+  ox.clip();
+  ox.imageSmoothingEnabled=true;
+  ox.imageSmoothingQuality='high';
+  ox.drawImage(img,0,0,exportSize,exportSize);
+  ox.restore();
+
+  const a=document.createElement('a');
+  a.download=`sira_circle_highres_from_${lockedP}_preview.png`;
+  a.href=out.toDataURL('image/png');
+  a.click();
+  triggerFeedback(`SAVED 1000 PNG`);
+}
+
+function createDefaultImage(){
+  sourceCanvas.width=900;sourceCanvas.height=900;
+  const g=sourceCtx.createLinearGradient(0,0,0,900);
+  g.addColorStop(0,'#d9c9a3');g.addColorStop(.45,'#8c8165');g.addColorStop(1,'#28342d');
+  sourceCtx.fillStyle=g;sourceCtx.fillRect(0,0,900,900);
+  function m(base,color,phase){
+    sourceCtx.beginPath();sourceCtx.moveTo(0,900);
+    for(let x=0;x<=960;x+=60){let y=base+Math.sin(x*.015+phase)*55+Math.sin(x*.041)*25;sourceCtx.lineTo(x,y)}
+    sourceCtx.lineTo(900,900);sourceCtx.closePath();sourceCtx.fillStyle=color;sourceCtx.fill();
+  }
+  m(440,'#65604e',.2);m(560,'#444b3d',1.5);m(690,'#252d25',2.4);
+  sourceCtx.fillStyle='rgba(255,240,180,.8)';sourceCtx.beginPath();sourceCtx.arc(650,250,55,0,Math.PI*2);sourceCtx.fill();
+}
+function updateLiveSource(){
+  if(!liveMode||frozen||video.readyState<2)return;
+  sourceCanvas.width=video.videoWidth||900;sourceCanvas.height=video.videoHeight||900;
+  sourceCtx.drawImage(video,0,0,sourceCanvas.width,sourceCanvas.height);
+}
+function fitSourceToP(){
+  updateLiveSource();
+  const c=makeCanvas(P),cx=c.getContext('2d',{willReadFrequently:true});
+  const sw=sourceCanvas.width,sh=sourceCanvas.height,side=Math.min(sw,sh),sx=(sw-side)/2,sy=(sh-side)/2;
+  cx.imageSmoothingEnabled=true;cx.imageSmoothingQuality='medium';
+  cx.drawImage(sourceCanvas,sx,sy,side,side,0,0,P,P);
+  return c;
+}
+function applyCCDBase(base){
+  const c=makeCanvas(P),cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(base,0,0);
+  let id=cx.getImageData(0,0,P,P),d=id.data,seed={value:24681357};
+  for(let i=0;i<d.length;i+=4){
+    let r=d[i],g=d[i+1],b=d[i+2],lum=r*.299+g*.587+b*.114;
+    r=r*1.025+2;g=g*1.005;b=b*.975;
+    if(lum>205){let k=(lum-205)/50;r=r*(1-k*.035)+255*(k*.035);g=g*(1-k*.025)+255*(k*.025);b=b*(1-k*.015)+255*(k*.015)}
+    let n=(rnd(seed)-.5)*5.5;d[i]=clamp(r+n,0,255);d[i+1]=clamp(g+n,0,255);d[i+2]=clamp(b+n,0,255);
+  }
+  cx.putImageData(id,0,0);return c;
+}
+function processImage(){
+  const t0=performance.now();
+  let img=applyCCDBase(fitSourceToP());
+
+  for(let i=0;i<stack.length;i++){
+    if(draft && typeof draft.editIndex==='number' && draft.editIndex===i) continue;
+    img=applyEffect(img,stack[i]);
+  }
+  if(draft) img=applyEffect(img,draft);
+
+  if(simulateRGB565) img=applyRGB565(img);
+
+  lastFrameMS=performance.now()-t0;
+  return img;
+}
+function applyEffect(img,e){
+  if(e.name==='DITHER')return effectDither(img,e);
+  if(e.name==='HALFTONE')return effectHalftone(img,e);
+  if(e.name==='POSTERIZE')return effectPosterize(img,e);
+  if(e.name==='CRT/RGB')return effectCrtRgb(img,e);
+  if(e.name==='NOISE')return effectNoise(img,e);
+  if(e.name==='INVERT')return effectInvert(img,e);
+  return img;
+}
+function effectDither(base,e){
+  const amount=paramValue(e,'AMOUNT'),steps=Math.round(paramValue(e,'COLOR')),diff=paramValue(e,'DIFFUSE');
+  if(amount<=0)return base;
+  const c=makeCanvas(P),cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(base,0,0);
+  let img=cx.getImageData(0,0,P,P),d=img.data,str=amount/100*diff/100;
+  if(steps>0){
+    const levels=Math.max(2,steps+1);const arr=new Int32Array(d.length);for(let i=0;i<d.length;i++)arr[i]=d[i]<<4;
+    for(let y=0;y<P-1;y++)for(let x=1;x<P-1;x++)for(let ch=0;ch<3;ch++){
+      const idx=(y*P+x)*4+ch,old=arr[idx],neu=Math.round((old>>4)/255*(levels-1))*(255/(levels-1)),err=(old-(neu<<4))*str;
+      arr[idx]=neu<<4;arr[idx+4]+=err*7/16;arr[idx+(P-1)*4]+=err*3/16;arr[idx+P*4]+=err*5/16;arr[idx+(P+1)*4]+=err/16;
+    }
+    for(let i=0;i<d.length;i+=4){d[i]=clamp(arr[i]>>4,0,255);d[i+1]=clamp(arr[i+1]>>4,0,255);d[i+2]=clamp(arr[i+2]>>4,0,255)}
+  }else{
+    const gray=new Int32Array(P*P);for(let i=0,j=0;i<d.length;i+=4,j++)gray[j]=(d[i]*77+d[i+1]*150+d[i+2]*29);
+    for(let y=0;y<P-1;y++)for(let x=1;x<P-1;x++){
+      const idx=y*P+x,old=gray[idx],neu=old>127*256?255*256:0,err=(old-neu)*str;
+      gray[idx]=neu;gray[idx+1]+=err*7/16;gray[idx+P-1]+=err*3/16;gray[idx+P]+=err*5/16;gray[idx+P+1]+=err/16;
+    }
+    for(let i=0,j=0;i<d.length;i+=4,j++){let v=clamp(gray[j]>>8,0,255);d[i]=d[i+1]=d[i+2]=v}
+  }
+  cx.putImageData(img,0,0);return c;
+}
+function effectHalftone(base,e){
+  const size=paramValue(e,'SIZE'),angleValue=paramValue(e,'ANGLE'),plates=Math.round(paramValue(e,'PALETTE'));
+  if(size<=0)return base;
+
+  // Round-dot hardware simulation:
+  // sample from the ESP-size buffer, but render dots at 2x then downsample.
+  // This keeps the embedded constraint but avoids the square/dither look.
+  const dot=Math.round(7+size/100*18);
+  const scale=2;
+  const HP=P*scale;
+  const angle=(angleValue-50)/50*Math.PI/6;
+  const high=makeCanvas(HP),hx=high.getContext('2d');
+  hx.fillStyle='#e8dec8';
+  hx.fillRect(0,0,HP,HP);
+
+  const s=makeCanvas(P),sc=s.getContext('2d',{willReadFrequently:true});
+  sc.drawImage(base,0,0,P,P);
+  const data=sc.getImageData(0,0,P,P).data;
+
+  const cols=[[0,0,0],[220,40,40],[40,120,230],[240,190,20],[20,170,110],[190,60,210],[255,120,40],[70,70,70],[30,200,220],[180,120,70]];
+  const active=Math.max(1,plates||1),center=P/2,ca=Math.cos(angle),sa=Math.sin(angle);
+
+  for(let y=-P;y<P*2;y+=dot){
+    for(let x=-P;x<P*2;x+=dot){
+      const rx=Math.round((x-center)*ca-(y-center)*sa+center);
+      const ry=Math.round((x-center)*sa+(y-center)*ca+center);
+      if(rx<0||rx>=P||ry<0||ry>=P)continue;
+
+      const i=(ry*P+rx)*4;
+      const r=data[i],g=data[i+1],b=data[i+2];
+      const lum=r*.299+g*.587+b*.114;
+
+      // Slightly stronger circle radius so it reads as halftone, not dither.
+      const rad=Math.max(.8,(1-lum/255)*dot*.56);
+
+      let fill='#1a1713';
+      if(plates>0){
+        const pi=Math.floor(((r+g*2+b*3)/255)*active)%Math.min(active,cols.length);
+        const co=cols[pi];
+        fill=`rgb(${co[0]},${co[1]},${co[2]})`;
+        hx.globalAlpha=.72;
+      }
+
+      hx.beginPath();
+      hx.arc(rx*scale,ry*scale,rad*scale,0,Math.PI*2);
+      hx.fillStyle=fill;
+      hx.fill();
+      hx.globalAlpha=1;
+    }
   }
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(C - 32, C + screenR - 28);
-  ctx.lineTo(C + 32, C + screenR - 28);
-  ctx.strokeStyle = uiMode === 2 ? 'rgba(255,255,255,.70)' : 'rgba(240,210,80,.55)';
-  ctx.lineWidth = uiMode === 2 ? 2 : 1.2;
-  ctx.stroke();
-  ctx.restore();
-
-  if(uiMode > 0){
-    const p = cpar();
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = `normal 12px Arial,Helvetica,sans-serif`;
-    ctx.fillStyle = 'rgba(220,190,100,.55)';
-    ctx.fillText(cp().name, C, C - screenR + 56);
-
-    if(p){
-      ctx.font = uiMode === 2 ? `bold 34px Arial,Helvetica,sans-serif` : `bold 22px Arial,Helvetica,sans-serif`;
-      ctx.fillStyle = uiMode === 2 ? '#f8f2df' : 'rgba(245,222,154,.82)';
-      ctx.shadowColor = 'rgba(0,0,0,.9)';
-      ctx.shadowBlur = 10;
-      ctx.fillText(uiMode === 2 ? Math.round(p.value) : 'PARAMS', C, C + 52);
-      ctx.font = `normal 11px Arial,Helvetica,sans-serif`;
-      ctx.fillStyle = 'rgba(220,190,100,.55)';
-      ctx.shadowBlur = 0;
-      ctx.fillText(uiMode === 2 ? 'ROTATE TO CHANGE VALUE · TAP TO CONFIRM' : 'ROTATE PARAMETER · TAP TO EDIT VALUE', C, C + 84);
-    }
-    ctx.restore();
-  }
+  const out=makeCanvas(P),ox=out.getContext('2d');
+  ox.imageSmoothingEnabled=true;
+  ox.imageSmoothingQuality='high';
+  ox.drawImage(high,0,0,P,P);
+  return out;
 }
-
+function effectPosterize(base,e){
+  const lev=paramValue(e,'LEVELS'),pal=paramValue(e,'PALETTE');if(lev<=0&&pal<=0)return base;
+  const levels=Math.round(24-lev/100*22),c=makeCanvas(P),cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(base,0,0);
+  const img=cx.getImageData(0,0,P,P),d=img.data;
+  for(let i=0;i<d.length;i+=4){
+    let r=d[i],g=d[i+1],b=d[i+2];
+    if(lev>0){r=Math.floor(r/256*levels)*(255/Math.max(1,levels-1));g=Math.floor(g/256*levels)*(255/Math.max(1,levels-1));b=Math.floor(b/256*levels)*(255/Math.max(1,levels-1))}
+    const ps=pal/100,warm=(i/4)%2<1,tr=warm?r*1.18+12:r*.75,tg=warm?g*.92:g*.95+8,tb=warm?b*.72:b*1.2+10;
+    d[i]=clamp(r*(1-ps)+tr*ps,0,255);d[i+1]=clamp(g*(1-ps)+tg*ps,0,255);d[i+2]=clamp(b*(1-ps)+tb*ps,0,255);
+  }
+  cx.putImageData(img,0,0);return c;
+}
+function effectCrtRgb(base,e){
+  const split=paramValue(e,'SPLIT'),scan=paramValue(e,'SCAN');if(split<=0&&scan<=0)return base;
+  const h=Math.round(split/100*24),c=makeCanvas(P),cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(base,0,0);
+  const src=cx.getImageData(0,0,P,P),out=cx.createImageData(P,P);
+  for(let y=0;y<P;y++){const sm=(y%4<2)?(1-scan/100*.45):1;for(let x=0;x<P;x++){
+    const i=(y*P+x)*4,xr=clamp(x+h,0,P-1),xb=clamp(x-h,0,P-1),ir=(y*P+xr)*4,ib=(y*P+xb)*4;
+    out.data[i]=clamp(src.data[ir]*sm,0,255);out.data[i+1]=clamp(src.data[i+1]*sm,0,255);out.data[i+2]=clamp(src.data[ib+2]*sm,0,255);out.data[i+3]=255;
+  }}
+  cx.putImageData(out,0,0);return c;
+}
+function effectNoise(base,e){
+  const grain=paramValue(e,'B&W'),cn=paramValue(e,'COLOR');if(grain<=0&&cn<=0)return base;
+  const c=makeCanvas(P),cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(base,0,0);
+  const img=cx.getImageData(0,0,P,P),d=img.data,sg={value:grainSeed},sn={value:noiseSeed};
+  for(let i=0;i<d.length;i+=4){const lg=(rnd(sg)-.5)*grain*1.1;d[i]=clamp(d[i]+lg+(rnd(sn)-.5)*cn*1.2,0,255);d[i+1]=clamp(d[i+1]+lg+(rnd(sn)-.5)*cn*1.2,0,255);d[i+2]=clamp(d[i+2]+lg+(rnd(sn)-.5)*cn*1.2,0,255)}
+  cx.putImageData(img,0,0);return c;
+}
+function effectInvert(base,e){
+  const mix=paramValue(e,'MIX');if(mix<=0)return base;
+  const mx=mix/100,c=makeCanvas(P),cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(base,0,0);
+  const img=cx.getImageData(0,0,P,P),d=img.data;
+  for(let i=0;i<d.length;i+=4){d[i]=d[i]*(1-mx)+(255-d[i])*mx;d[i+1]=d[i+1]*(1-mx)+(255-d[i+1])*mx;d[i+2]=d[i+2]*(1-mx)+(255-d[i+2])*mx}
+  cx.putImageData(img,0,0);return c;
+}
+function applyRGB565(base){
+  const c=makeCanvas(P),cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(base,0,0);
+  const img=cx.getImageData(0,0,P,P),d=img.data;
+  for(let i=0;i<d.length;i+=4){d[i]=(d[i]>>3)<<3;d[i+1]=(d[i+1]>>2)<<2;d[i+2]=(d[i+2]>>3)<<3}
+  cx.putImageData(img,0,0);return c;
+}
 function drawOuterBody(){
-  const outerBodyR = 370;
-
-  ctx.save();
-  ctx.shadowColor = 'rgba(0,0,0,.9)';
-  ctx.shadowBlur = 60;
-  ctx.shadowOffsetY = 12;
-
-  const bodyGrad = ctx.createRadialGradient(C-80,C-80,30,C,C,outerBodyR);
-  bodyGrad.addColorStop(0.00,'#e8c86a');
-  bodyGrad.addColorStop(0.18,'#c8a44a');
-  bodyGrad.addColorStop(0.45,'#8a6820');
-  bodyGrad.addColorStop(0.70,'#6b5018');
-  bodyGrad.addColorStop(0.88,'#9a7830');
-  bodyGrad.addColorStop(1.00,'#b89040');
-
-  ctx.beginPath();
-  ctx.arc(C,C,outerBodyR,0,Math.PI*2);
-  ctx.fillStyle = bodyGrad;
-  ctx.fill();
-  ctx.restore();
-
-  const rimGrad = ctx.createLinearGradient(C-outerBodyR,C-outerBodyR,C+outerBodyR,C+outerBodyR);
-  rimGrad.addColorStop(0,'rgba(255,220,100,.55)');
-  rimGrad.addColorStop(.4,'rgba(100,70,10,.2)');
-  rimGrad.addColorStop(1,'rgba(30,15,0,.6)');
-  ctx.beginPath();
-  ctx.arc(C,C,outerBodyR,0,Math.PI*2);
-  ctx.strokeStyle = rimGrad;
-  ctx.lineWidth = 5;
-  ctx.stroke();
-
-  for(let i=0;i<3;i++){
-    const r = outerBodyR - 14 - i * 7;
-    ctx.beginPath();
-    ctx.arc(C,C,r,0,Math.PI*2);
-    ctx.strokeStyle = `rgba(40,20,0,${0.35 - i*.08})`;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(C,C,r+1.5,0,Math.PI*2);
-    ctx.strokeStyle = `rgba(255,200,80,${0.12 - i*.03})`;
-    ctx.lineWidth = .8;
-    ctx.stroke();
-  }
+  const outerBodyR=370;ctx.save();ctx.shadowColor='rgba(0,0,0,.9)';ctx.shadowBlur=60;ctx.shadowOffsetY=12;
+  const bg=ctx.createRadialGradient(C-80,C-80,30,C,C,outerBodyR);bg.addColorStop(0,'#e8c86a');bg.addColorStop(.18,'#c8a44a');bg.addColorStop(.45,'#8a6820');bg.addColorStop(.7,'#6b5018');bg.addColorStop(.88,'#9a7830');bg.addColorStop(1,'#b89040');
+  ctx.beginPath();ctx.arc(C,C,outerBodyR,0,Math.PI*2);ctx.fillStyle=bg;ctx.fill();ctx.restore();
+  ctx.beginPath();ctx.arc(C,C,outerBodyR,0,Math.PI*2);ctx.strokeStyle='rgba(255,220,100,.42)';ctx.lineWidth=5;ctx.stroke();
 }
-
 function drawRotatingDial(){
-  const ringOuter = 342;
-  const ringInner = 262;
-  const holeCount = 28;
-  const holeRadius = 9.5;
-  const holeOrbit = 304;
-
-  ctx.save();
-
-  const recess = ctx.createRadialGradient(C,C,ringInner,C,C,ringOuter+16);
-  recess.addColorStop(0.00,'#080705');
-  recess.addColorStop(.58,'#1a1308');
-  recess.addColorStop(1.00,'#050403');
-  ctx.beginPath();
-  ctx.arc(C,C,ringOuter+8,0,Math.PI*2);
-  ctx.arc(C,C,ringInner-9,0,Math.PI*2,true);
-  ctx.fillStyle = recess;
-  ctx.fill('evenodd');
-
-  const dc = document.createElement('canvas');
-  dc.width = W;
-  dc.height = H;
-  const dctx = dc.getContext('2d');
-
-  dctx.save();
-  dctx.beginPath();
-  dctx.arc(C,C,ringOuter,0,Math.PI*2);
-  dctx.arc(C,C,ringInner,0,Math.PI*2,true);
-  dctx.clip('evenodd');
-
-  const ringGrad = dctx.createRadialGradient(C-100,C-120,40,C,C,ringOuter);
-  ringGrad.addColorStop(0.00,'#ffe39a');
-  ringGrad.addColorStop(.18,'#d9ad54');
-  ringGrad.addColorStop(.43,'#a8752d');
-  ringGrad.addColorStop(.70,'#684017');
-  ringGrad.addColorStop(1.00,'#c29745');
-  dctx.fillStyle = ringGrad;
-  dctx.beginPath();
-  dctx.arc(C,C,ringOuter,0,Math.PI*2);
-  dctx.arc(C,C,ringInner,0,Math.PI*2,true);
-  dctx.fill('evenodd');
-
-  dctx.save();
-  dctx.translate(C,C);
-  dctx.rotate(dialRotation);
-  dctx.translate(-C,-C);
-
-  for(let i=0;i<64;i++){
-    const a = (i/64) * Math.PI * 2;
-    const r1 = ringInner + 18;
-    const r2 = ringOuter - 17;
-    dctx.beginPath();
-    dctx.moveTo(C + Math.cos(a)*r1, C + Math.sin(a)*r1);
-    dctx.lineTo(C + Math.cos(a)*r2, C + Math.sin(a)*r2);
-    dctx.strokeStyle = i % 4 === 0 ? 'rgba(40,22,6,.20)' : 'rgba(255,225,135,.055)';
-    dctx.lineWidth = i % 4 === 0 ? 1.5 : .8;
-    dctx.stroke();
-  }
-
-  dctx.globalCompositeOperation = 'destination-out';
-  for(let i=0;i<holeCount;i++){
-    const a = (i/holeCount) * Math.PI * 2;
-    const x = C + Math.cos(a) * holeOrbit;
-    const y = C + Math.sin(a) * holeOrbit;
-    dctx.beginPath();
-    dctx.arc(x,y,holeRadius,0,Math.PI*2);
-    dctx.fill();
-  }
-  dctx.globalCompositeOperation = 'source-over';
-
-  for(let i=0;i<holeCount;i++){
-    const a = (i/holeCount) * Math.PI * 2;
-    const x = C + Math.cos(a) * holeOrbit;
-    const y = C + Math.sin(a) * holeOrbit;
-
-    dctx.beginPath();
-    dctx.arc(x,y,holeRadius+1.8,0,Math.PI*2);
-    dctx.strokeStyle = 'rgba(255,225,140,.18)';
-    dctx.lineWidth = 1.1;
-    dctx.stroke();
-
-    dctx.beginPath();
-    dctx.arc(x,y,holeRadius+3.1,0,Math.PI*2);
-    dctx.strokeStyle = 'rgba(45,23,5,.20)';
-    dctx.lineWidth = 1.0;
-    dctx.stroke();
-  }
-
-  dctx.restore();
-
-  dctx.save();
-  dctx.beginPath();
-  dctx.arc(C,C,ringOuter,0,Math.PI*2);
-  dctx.arc(C,C,ringInner,0,Math.PI*2,true);
-  dctx.clip('evenodd');
-  dctx.translate(C,C);
-  dctx.rotate(dialRotation * .35);
-  dctx.translate(-C,-C);
-  for(let i=0;i<90;i++){
-    const a = i * .21;
-    const r = ringInner + 12 + (i % 13) * 4.2;
-    dctx.beginPath();
-    dctx.arc(C,C,r,a,a+.46);
-    dctx.strokeStyle = i % 2 ? 'rgba(255,230,150,.08)' : 'rgba(50,28,10,.10)';
-    dctx.lineWidth = 1.3;
-    dctx.stroke();
-  }
-  dctx.restore();
-
-  dctx.restore();
-  ctx.drawImage(dc,0,0);
-
-  const outerBevel = ctx.createLinearGradient(C-ringOuter,C-ringOuter,C+ringOuter,C+ringOuter);
-  outerBevel.addColorStop(0,'rgba(255,235,150,.45)');
-  outerBevel.addColorStop(.45,'rgba(85,50,15,.25)');
-  outerBevel.addColorStop(1,'rgba(15,7,0,.75)');
-  ctx.beginPath();
-  ctx.arc(C,C,ringOuter,0,Math.PI*2);
-  ctx.strokeStyle = outerBevel;
-  ctx.lineWidth = 7;
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(C,C,ringInner,0,Math.PI*2);
-  ctx.strokeStyle = 'rgba(15,7,0,.82)';
-  ctx.lineWidth = 12;
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(C,C,ringInner-6,0,Math.PI*2);
-  ctx.strokeStyle = 'rgba(255,210,95,.22)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  ctx.restore();
+  const ringOuter=342,ringInner=262,holeCount=28,holeRadius=9.5,holeOrbit=304;
+  const recess=ctx.createRadialGradient(C,C,ringInner,C,C,ringOuter+16);recess.addColorStop(0,'#080705');recess.addColorStop(.58,'#1a1308');recess.addColorStop(1,'#050403');
+  ctx.beginPath();ctx.arc(C,C,ringOuter+8,0,Math.PI*2);ctx.arc(C,C,ringInner-9,0,Math.PI*2,true);ctx.fillStyle=recess;ctx.fill('evenodd');
+  const dc=makeCanvas(W,H),dctx=dc.getContext('2d');dctx.save();dctx.beginPath();dctx.arc(C,C,ringOuter,0,Math.PI*2);dctx.arc(C,C,ringInner,0,Math.PI*2,true);dctx.clip('evenodd');
+  const rg=dctx.createRadialGradient(C-100,C-120,40,C,C,ringOuter);rg.addColorStop(0,'#ffe39a');rg.addColorStop(.18,'#d9ad54');rg.addColorStop(.43,'#a8752d');rg.addColorStop(.7,'#684017');rg.addColorStop(1,'#c29745');
+  dctx.fillStyle=rg;dctx.beginPath();dctx.arc(C,C,ringOuter,0,Math.PI*2);dctx.arc(C,C,ringInner,0,Math.PI*2,true);dctx.fill('evenodd');
+  dctx.save();dctx.translate(C,C);dctx.rotate(dialRotation);dctx.translate(-C,-C);
+  for(let i=0;i<64;i++){const a=i/64*Math.PI*2,r1=ringInner+18,r2=ringOuter-17;dctx.beginPath();dctx.moveTo(C+Math.cos(a)*r1,C+Math.sin(a)*r1);dctx.lineTo(C+Math.cos(a)*r2,C+Math.sin(a)*r2);dctx.strokeStyle=i%4===0?'rgba(40,22,6,.20)':'rgba(255,225,135,.055)';dctx.lineWidth=i%4===0?1.5:.8;dctx.stroke()}
+  dctx.globalCompositeOperation='destination-out';for(let i=0;i<holeCount;i++){const a=i/holeCount*Math.PI*2,x=C+Math.cos(a)*holeOrbit,y=C+Math.sin(a)*holeOrbit;dctx.beginPath();dctx.arc(x,y,holeRadius,0,Math.PI*2);dctx.fill()}
+  dctx.globalCompositeOperation='source-over';for(let i=0;i<holeCount;i++){const a=i/holeCount*Math.PI*2,x=C+Math.cos(a)*holeOrbit,y=C+Math.sin(a)*holeOrbit;dctx.beginPath();dctx.arc(x,y,holeRadius+1.8,0,Math.PI*2);dctx.strokeStyle='rgba(255,225,140,.18)';dctx.lineWidth=1.1;dctx.stroke()}
+  dctx.restore();dctx.restore();ctx.drawImage(dc,0,0);
+  ctx.beginPath();ctx.arc(C,C,ringOuter,0,Math.PI*2);ctx.strokeStyle='rgba(255,235,150,.45)';ctx.lineWidth=7;ctx.stroke();ctx.beginPath();ctx.arc(C,C,ringInner,0,Math.PI*2);ctx.strokeStyle='rgba(15,7,0,.82)';ctx.lineWidth=12;ctx.stroke();
 }
-
 function drawScreen(){
-  const screenR = imageDiameter / 2;
-  const img = processImage();
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(C,C,screenR,0,Math.PI*2);
-  ctx.clip();
-
-  ctx.fillStyle = '#000';
-  ctx.fillRect(C-screenR,C-screenR,screenR*2,screenR*2);
-
-  ctx.drawImage(img,C-screenR,C-screenR,screenR*2,screenR*2);
-
-  ctx.fillStyle = 'rgba(0,0,0,.18)';
-  ctx.fillRect(C-screenR,C-screenR,screenR*2,screenR*2);
-
-  const gloss = ctx.createRadialGradient(C-screenR*.3,C-screenR*.35,0,C,C,screenR*.9);
-  gloss.addColorStop(0,'rgba(255,255,255,.08)');
-  gloss.addColorStop(.45,'rgba(255,255,255,.02)');
-  gloss.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle = gloss;
-  ctx.fillRect(C-screenR,C-screenR,screenR*2,screenR*2);
-  ctx.restore();
-
-  const bezelGrad = ctx.createLinearGradient(C-screenR,C-screenR,C+screenR,C+screenR);
-  bezelGrad.addColorStop(0,'rgba(255,220,100,.35)');
-  bezelGrad.addColorStop(.5,'rgba(60,40,10,.5)');
-  bezelGrad.addColorStop(1,'rgba(20,10,0,.7)');
-  ctx.beginPath();
-  ctx.arc(C,C,screenR,0,Math.PI*2);
-  ctx.strokeStyle = bezelGrad;
-  ctx.lineWidth = 4;
-  ctx.stroke();
+  const img=processImage();ctx.save();ctx.beginPath();ctx.arc(C,C,screenR,0,Math.PI*2);ctx.clip();ctx.fillStyle='#000';ctx.fillRect(C-screenR,C-screenR,screenR*2,screenR*2);ctx.imageSmoothingEnabled=false;ctx.drawImage(img,C-screenR,C-screenR,screenR*2,screenR*2);ctx.imageSmoothingEnabled=true;ctx.fillStyle='rgba(0,0,0,.12)';ctx.fillRect(C-screenR,C-screenR,screenR*2,screenR*2);ctx.restore();ctx.beginPath();ctx.arc(C,C,screenR,0,Math.PI*2);ctx.strokeStyle='rgba(255,220,100,.35)';ctx.lineWidth=4;ctx.stroke();
 }
-
-function drawTickMarks(){
-  const screenR = imageDiameter / 2;
-  const n = 72;
-  for(let i=0;i<n;i++){
-    const a = (i/n) * Math.PI * 2 - Math.PI / 2;
-    const isMaj = i % 9 === 0;
-    const isMed = i % 3 === 0;
-    const inner = screenR - (isMaj ? 14 : isMed ? 9 : 5);
-    const outer = screenR - 1;
-    const x1 = C + Math.cos(a) * inner;
-    const y1 = C + Math.sin(a) * inner;
-    const x2 = C + Math.cos(a) * outer;
-    const y2 = C + Math.sin(a) * outer;
-
-    ctx.beginPath();
-    ctx.moveTo(x1,y1);
-    ctx.lineTo(x2,y2);
-    ctx.strokeStyle = isMaj ? 'rgba(220,180,80,.7)' : isMed ? 'rgba(180,140,60,.4)' : 'rgba(140,100,40,.2)';
-    ctx.lineWidth = isMaj ? 1.5 : .8;
-    ctx.stroke();
+function drawTicks(){for(let i=0;i<72;i++){const a=i/72*Math.PI*2-Math.PI/2,isMaj=i%9===0,isMed=i%3===0,inner=screenR-(isMaj?14:isMed?9:5),outer=screenR-1;ctx.beginPath();ctx.moveTo(C+Math.cos(a)*inner,C+Math.sin(a)*inner);ctx.lineTo(C+Math.cos(a)*outer,C+Math.sin(a)*outer);ctx.strokeStyle=isMaj?'rgba(220,180,80,.7)':isMed?'rgba(180,140,60,.4)':'rgba(140,100,40,.2)';ctx.lineWidth=isMaj?1.5:.8;ctx.stroke()}}
+function textCenter(t,x,y,s,w='normal',col='#fff3cf',a=1){ctx.save();ctx.globalAlpha=a;ctx.fillStyle=col;ctx.font=`${w} ${s}px Arial,Helvetica,sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.shadowColor='rgba(0,0,0,.95)';ctx.shadowBlur=12;ctx.shadowOffsetY=2;ctx.fillText(t,x,y);ctx.restore()}
+function drawLabels(){
+  const proc = cp();
+  if(!proc) return;
+  const names=uiMode==='effects'?processes.map(p=>p.name):(proc.params||[]).map(p=>p.name),selected=uiMode==='effects'?processIndex:paramIndex,n=names.length||1;
+  for(let i=0;i<names.length;i++){
+    let rel=i-selected;
+    if(rel>n/2)rel-=n;
+    if(rel<-n/2)rel+=n;
+    if(Math.abs(rel)>2)continue;
+    const d=Math.abs(rel),isParam=uiMode!=='effects',x=C+rel*(isParam?96:82),y=C+screenR-44-d*10,sz=rel===0?(isParam?18:20):d===1?13:9,alp=rel===0?1:d===1?.65:.28;
+    const exists=uiMode==='effects' && findStackIndex(processes[i].name)>=0;
+    textCenter((exists&&rel===0?'EDIT ':'')+names[i],x,y,sz,rel===0?'bold':'normal',rel===0?'#f4df9a':'#d4b860',alp);
   }
-}
 
-function drawBrand(){
-  const screenR = imageDiameter / 2;
-  ctx.save();
-  ctx.font = 'bold 12px Arial,Helvetica,sans-serif';
-  ctx.fillStyle = 'rgba(220,180,70,.42)';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('S I R A', C, C + screenR - 14);
-  ctx.restore();
+  ctx.beginPath();
+  ctx.moveTo(C-32,C+screenR-28);
+  ctx.lineTo(C+32,C+screenR-28);
+  ctx.strokeStyle=uiMode==='value'?'rgba(255,255,255,.7)':'rgba(240,210,80,.55)';
+  ctx.lineWidth=uiMode==='value'?2:1.2;
+  ctx.stroke();
+
+  if(uiMode!=='effects'){
+    const p=currentParamFromDraft();
+    textCenter(cp().name,C,C-screenR+56,12,'normal','rgba(220,190,100,.75)');
+    textCenter(uiMode==='value'?Math.round(p.value):'PARAMS',C,C+52,uiMode==='value'?34:22,'bold',uiMode==='value'?'#f8f2df':'rgba(245,222,154,.82)');
+    textCenter(uiMode==='value'?'ROTATE VALUE · TAP APPLY · BACK TO PARAMS':'ROTATE PARAM · TAP EDIT · HOLD CANCEL',C,C+84,11,'normal','rgba(220,190,100,.62)');
+  }
+
+  // Stack indicator: 3 slots, each effect can exist only once.
+  const y=C+screenR-14;
+  const x0=C-52;
+  for(let i=0;i<3;i++){
+    const x=x0+i*52;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x,y,12,0,Math.PI*2);
+    ctx.strokeStyle='rgba(220,180,70,.48)';
+    ctx.lineWidth=1.4;
+    ctx.stroke();
+    if(stack[i]){
+      ctx.fillStyle='rgba(220,180,70,.76)';
+      ctx.fill();
+      ctx.font='bold 8px Arial,Helvetica,sans-serif';
+      ctx.fillStyle='#100b05';
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.fillText(stack[i].name.replace('/RGB','').slice(0,2),x,y+0.5);
+    }
+    ctx.restore();
+  }
+  const editingExisting=uiMode==='effects' && findStackIndex(cp().name)>=0;
+  const stackLabel=stack.length>=3?'MAX 3':`STACK ${stack.length}/3`;
+  textCenter(`${stackLabel}${editingExisting?' · EDIT':''}`,C,y+28,11,'bold',stack.length>=3?'#ffce70':'rgba(220,180,70,.55)');
 }
 
 function drawFrame(){
-  if(liveMode && !frozen) updateLiveSource();
-
-  // Smooth rotation update.
-  if(Math.abs(targetDialRot - dialRotation) > .001){
-    dialRotation += (targetDialRot - dialRotation) * .15;
-  }else{
-    dialRotation = targetDialRot;
-  }
-
+  if(liveMode&&!frozen)updateLiveSource();
+  const now=performance.now();
+  dialRotation+=(targetDialRot-dialRotation)*.15;
   ctx.clearRect(0,0,W,H);
-
-  let page = ctx.createRadialGradient(C,C,120,C,C,620);
-  page.addColorStop(0,'#101010');
-  page.addColorStop(.66,'#020202');
-  page.addColorStop(1,'#000000');
-  ctx.fillStyle = page;
+  const page=ctx.createRadialGradient(C,C,120,C,C,620);
+  page.addColorStop(0,'#101010');page.addColorStop(.66,'#020202');page.addColorStop(1,'#000');
+  ctx.fillStyle=page;
   ctx.fillRect(0,0,W,H);
 
+  let shakeX=0;
+  if(now<shakeUntil){
+    const t=(shakeUntil-now)/360;
+    shakeX=Math.sin(now*.12)*12*t;
+  }
+
+  ctx.save();
+  ctx.translate(shakeX,0);
   drawOuterBody();
   drawRotatingDial();
   drawScreen();
-  drawTickMarks();
-  drawDialLabels();
-  drawBrand();
+  drawTicks();
+  drawLabels();
+  drawHoldProgress(now);
+  drawFeedback(now);
+  ctx.restore();
 
-  const now = performance.now();
-  if(now < overlayUntil){
-    const a = clamp((overlayUntil-now)/350,0,1);
-    const proc = cp();
-    const par = cpar();
-
-    ctx.save();
-    ctx.globalAlpha = a;
-    rr(C-115,C+imageDiameter/2-110,230,84,24);
-    ctx.fillStyle = 'rgba(8,8,8,.62)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(238,180,95,.28)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.restore();
-
-    let top='PROCESS',main=proc.name,sub='';
-    if(uiMode===1){top='PARAMETER';main=par.name;sub=proc.name}
-    if(uiMode===2){top=par.name;main=String(Math.round(par.value));sub=proc.name}
-
-    textCenter(top,C,C+imageDiameter/2-92,13,'normal','#d8c08a',a);
-    textCenter(main,C,C+imageDiameter/2-64,26,'bold','#fff6d7',a);
-    if(sub) textCenter(sub,C,C+imageDiameter/2-38,13,'normal','#d8c08a',a);
+  if(now-lastFpsUpdate>180){
+    document.getElementById('perf').textContent=`ESP ${P}${simulateRGB565?' · RGB565':''} · ${lastFrameMS.toFixed(1)} ms`;
+    lastFpsUpdate=now
   }
-
-  if((liveMode && !frozen) || now < overlayUntil || Math.abs(targetDialRot - dialRotation) > .002){
-    scheduleFrame();
-  }
+  requestAnimationFrame(drawFrame);
 }
-function rotateDial(direction,step){if(uiMode===0){processIndex=(processIndex-direction+processes.length)%processes.length;paramIndex=0;targetDialRot-=direction*(Math.PI*2/processes.length)}else if(uiMode===1){let ps=cp().params;paramIndex=(paramIndex-direction+ps.length)%ps.length;targetDialRot-=direction*.18}else{cp().active=true;let par=cpar(),st=par.max===10?1:step;par.value=clamp(par.value+direction*st,par.min,par.max);targetDialRot+=direction*.055}showOverlay();updateDialTextLayer();drawFrame()}
-function centerPress(){
-  if(uiMode===0){
-    if(cp().random){
-      mutateRecipe();
-      return;
-    }
-    uiMode=1;
+function rotateDial(direction,step=1){
+  if(uiMode==='effects'){
+    processIndex=(processIndex-direction+processes.length)%processes.length;
     paramIndex=0;
-  }else if(uiMode===1){
-    cp().active=true;
-    uiMode=2;
-  }else{
-    cp().active=true;
-    uiMode=1;
+    draft=null;
+    targetDialRot-=direction*(Math.PI*2/processes.length);
   }
-  showOverlay(1100);
-  updateDialTextLayer();
-  drawFrame();
+  else if(uiMode==='params'){
+    const ps=cp().params;
+    paramIndex=(paramIndex-direction+ps.length)%ps.length;
+    targetDialRot-=direction*.18;
+  }
+  else{
+    const p=currentParamFromDraft();
+    const st=p.max===10 ? 1 : step;
+    p.value=clamp(p.value+direction*st,p.min,p.max);
+    targetDialRot+=direction*.055;
+  }
+  showOverlay();
 }
-function backToEffects(){
-  uiMode=0;
-  updateDialTextLayer();
+function centerPress(){
+  if(uiMode==='effects'){
+    draft=getEditableEffect(cp());
+    paramIndex=0;
+    uiMode='params';
+  }
+  else if(uiMode==='params'){
+    uiMode='value';
+  }
+  else{
+    if(!upsertDraftToStack()) return;
+    uiMode='params';
+  }
   showOverlay(900);
-  drawFrame();
 }
-function resetCurrentParameter(){
-  if(uiMode===2){
-    let par=cpar();
-    par.value=par.def;
-    showOverlay(1000);
-    drawFrame();
-  }else if(uiMode===1){
-    backToEffects();
+function longPress(){
+  if(uiMode==='effects'){
+    stack=[];
+    draft=null;
+    uiMode='effects';
+    resetFlashUntil=performance.now()+820;
+    try{ if(navigator.vibrate) navigator.vibrate([45,35,45]); }catch(e){}
   }else{
-    resetAllParameters();
+    draft=null;
+    uiMode='effects';
+    triggerFeedback('CANCELLED');
   }
+  stopHoldVisual();
+  showOverlay(1100);
 }
-function resetAllParameters(){
-  processes.forEach(p=>{
-    p.active=false;
-    if(p.params)p.params.forEach(par=>par.value=par.def);
-  });
+function resetAll(){
+  stack=[];
+  draft=null;
+  uiMode='effects';
+  processIndex=0;
+  paramIndex=0;
   grainSeed=12345;
   noiseSeed=67890;
-  uiMode=0;
-  updateDialTextLayer();
-  showOverlay(1200);
-  drawFrame();
-}
-function mutateRecipe(){
-  // Fresh procedural recipe each click.
-  processes.forEach(p=>{
-    p.active=false;
-    if(p.params)p.params.forEach(par=>par.value=par.def);
-  });
-
-  let real=processes.filter(p=>!p.random);
-  let changes=2+Math.floor(Math.random()*4);
-
-  for(let c=0;c<changes;c++){
-    let p=real[Math.floor(Math.random()*real.length)];
-    p.active=true;
-    let edits=1+(Math.random()<.35?1:0);
-
-    for(let e=0;e<edits;e++){
-      let par=p.params[Math.floor(Math.random()*p.params.length)];
-      let range=par.max-par.min;
-      if(range<=10){
-        par.value=Math.floor(Math.random()*(par.max-par.min+1))+par.min;
-      }else{
-        let v=35+Math.random()*55;
-        if(Math.random()<.18)v=Math.random()*100;
-        par.value=clamp(Math.round(v/5)*5,par.min,par.max);
-      }
-    }
-  }
-
-  grainSeed=Math.floor(Math.random()*2000000000)+1;
-  noiseSeed=Math.floor(Math.random()*2000000000)+1;
-  uiMode=0;
-  updateDialTextLayer();
+  resetFlashUntil=performance.now()+820;
   showOverlay(1100);
-  drawFrame();
 }
-function startMutation(){if(mutateTimer)return;mutateRecipe();mutateTimer=setInterval(mutateRecipe,170)}function stopMutation(){if(holdTimer){clearTimeout(holdTimer);holdTimer=null}if(mutateTimer){clearInterval(mutateTimer);mutateTimer=null}}
-
-let touchDialActive=false;
-let touchLastAngle=0;
-let touchAccum=0;
-let touchMoved=false;
-
-function angleFromPoint(clientX, clientY){
-  let r=canvas.getBoundingClientRect();
-  let x=(clientX-r.left)/r.width*W-C;
-  let y=(clientY-r.top)/r.height*H-C;
-  return Math.atan2(y,x);
-}
-function signedAngleDelta(a,b){
-  let d=a-b;
-  while(d>Math.PI)d-=Math.PI*2;
-  while(d<-Math.PI)d+=Math.PI*2;
-  return d;
-}
-function isInsideCanvasCircle(clientX, clientY){
-  let r=canvas.getBoundingClientRect();
-  let x=(clientX-r.left)/r.width*W;
-  let y=(clientY-r.top)/r.height*H;
-  return Math.hypot(x-C,y-C)<imageDiameter/2;
-}
-
-// Touch/drag dial for phone.
-// Drag around the circle clockwise/counterclockwise.
-// Small angular movement = 1 step, fast/bigger movement = repeated steps.
-canvas.addEventListener('pointerdown',e=>{
-  if(e.pointerType==='mouse')return;
-  canvas.setPointerCapture(e.pointerId);
-  touchDialActive=true;
-  touchMoved=false;
-  touchLastAngle=angleFromPoint(e.clientX,e.clientY);
-  touchAccum=0;
-
-  let r=canvas.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*W,y=(e.clientY-r.top)/r.height*H;
-  if(Math.hypot(x-C,y-C)<imageDiameter/2){
-    holdTimer=setTimeout(()=>{suppressClick=true;resetCurrentParameter()},520);
-  }
-});
-
-canvas.addEventListener('pointermove',e=>{
-  if(!touchDialActive || e.pointerType==='mouse')return;
-  e.preventDefault();
-
-  let a=angleFromPoint(e.clientX,e.clientY);
-  let d=signedAngleDelta(a,touchLastAngle);
-  touchLastAngle=a;
-  touchAccum+=d;
-
-  let browseMode = uiMode===0 || uiMode===1;
-  let threshold = browseMode ? 0.145 : 0.055;
-  let fastThreshold = browseMode ? 0.34 : 0.14;
-
-  if(Math.abs(touchAccum)>threshold){
-    touchMoved=true;
-    if(holdTimer){clearTimeout(holdTimer);holdTimer=null}
-    let dir=touchAccum>0?-1:1;
-    let step=Math.abs(touchAccum)>fastThreshold?5:1;
-    rotateDial(dir,step);
-    touchAccum=0;
-  }
-},{passive:false});
-
-canvas.addEventListener('pointerup',e=>{
-  if(e.pointerType==='mouse')return;
-  touchDialActive=false;
-  if(holdTimer){clearTimeout(holdTimer);holdTimer=null}
-  stopMutation();
-  if(touchMoved){
-    suppressClick=true;
-    setTimeout(()=>suppressClick=false,80);
-  }
-});
-
-canvas.addEventListener('pointercancel',e=>{
-  touchDialActive=false;
-  if(holdTimer){clearTimeout(holdTimer);holdTimer=null}
-  stopMutation();
-});
-
-canvas.addEventListener('wheel',e=>{e.preventDefault();let now=performance.now(),dt=now-lastWheelTime;lastWheelTime=now;let dir=e.deltaY<0?1:-1,step=(dt<70||Math.abs(e.deltaY)>90)?5:1;rotateDial(dir,step)},{passive:false});canvas.addEventListener('mousedown',e=>{
-  let r=canvas.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*W,y=(e.clientY-r.top)/r.height*H;
-  if(Math.hypot(x-C,y-C)<imageDiameter/2){
-    holdTimer=setTimeout(()=>{suppressClick=true;resetCurrentParameter()},520);
-  }
-});
-window.addEventListener('mouseup',()=>{stopMutation()});canvas.addEventListener('click',e=>{if(suppressClick){suppressClick=false;return}let r=canvas.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*W,y=(e.clientY-r.top)/r.height*H;if(Math.hypot(x-C,y-C)<imageDiameter/2)centerPress()});document.getElementById('modeBtn').onclick=centerPress;document.getElementById('mutateBtn').onclick=mutateRecipe;document.getElementById('backBtn').onclick=backToEffects;document.getElementById('resetBtn').onclick=()=>{let p=cpar();if(p){p.value=p.def}else resetAllParameters();showOverlay(1000);drawFrame()};document.getElementById('saveBtn').onclick=()=>{let im=processImage(),out=document.createElement('canvas');out.width=out.height=imageDiameter;let ox=out.getContext('2d');ox.save();ox.beginPath();ox.arc(imageDiameter/2,imageDiameter/2,imageDiameter/2,0,Math.PI*2);ox.clip();ox.drawImage(im,0,0);ox.restore();let link=document.createElement('a');link.download=`sira_${cp().name.toLowerCase()}.png`;link.href=out.toDataURL('image/png');link.click()};document.getElementById('captureBtn').onclick=()=>{if(liveMode){updateLiveSource();frozen=!frozen;document.getElementById('captureBtn').textContent=frozen?'Resume Live':'Freeze Frame';showOverlay(900);drawFrame()}};document.getElementById('cameraBtn').onclick=async()=>{try{if(!liveMode){liveStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720},facingMode:'environment'},audio:false});video.srcObject=liveStream;liveMode=true;frozen=false;document.getElementById('cameraBtn').textContent='Stop Webcam';document.getElementById('captureBtn').textContent='Freeze Frame';showOverlay(1100);drawFrame()}else{liveStream?.getTracks().forEach(t=>t.stop());liveStream=null;liveMode=false;frozen=false;document.getElementById('cameraBtn').textContent='Start Webcam';document.getElementById('captureBtn').textContent='Freeze Frame';showOverlay(900);drawFrame()}}catch(err){alert('Camera access failed. Try Chrome/Firefox, or run from localhost if your browser blocks webcam access on local files.')}};fileInput.addEventListener('change',()=>{let file=fileInput.files[0];if(!file)return;if(liveMode){liveStream?.getTracks().forEach(t=>t.stop());liveStream=null;liveMode=false;frozen=false;document.getElementById('cameraBtn').textContent='Start Webcam';document.getElementById('captureBtn').textContent='Freeze Frame'}let img=new Image();img.onload=()=>{sourceCanvas.width=img.width;sourceCanvas.height=img.height;sourceCtx.drawImage(img,0,0);showOverlay(900);drawFrame()};img.src=URL.createObjectURL(file)});document.addEventListener('keydown',e=>{if(e.key===' '){e.preventDefault();centerPress()}if(e.key==='Escape'||e.key==='Backspace'){e.preventDefault();backToEffects()}if(e.key.toLowerCase()==='o')fileInput.click();if(e.key.toLowerCase()==='r'){resetCurrentParameter()}if(e.key.toLowerCase()==='s')document.getElementById('saveBtn').click();if(e.key.toLowerCase()==='m')mutateRecipe()});createDefaultImage();
-updateDialTextLayer();showOverlay(900);drawFrame();
+function angleFromPoint(clientX,clientY){const r=canvas.getBoundingClientRect();const x=(clientX-r.left)/r.width*W-C,y=(clientY-r.top)/r.height*H-C;return Math.atan2(y,x)}
+function signedAngleDelta(a,b){let d=a-b;while(d>Math.PI)d-=Math.PI*2;while(d<-Math.PI)d+=Math.PI*2;return d}
+let touchActive=false,lastAngle=0,accum=0,moved=false;
+canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);touchActive=true;moved=false;lastAngle=angleFromPoint(e.clientX,e.clientY);accum=0;startHoldVisual();holdTimer=setTimeout(()=>{suppressClick=true;longPress()},holdDuration)});
+canvas.addEventListener('pointermove',e=>{if(!touchActive)return;e.preventDefault();const a=angleFromPoint(e.clientX,e.clientY),d=signedAngleDelta(a,lastAngle);lastAngle=a;accum+=d;const browse=uiMode==='effects'||uiMode==='params';const threshold=browse ? .145 : .055;const fast=browse ? .34 : .14;const veryFast=browse ? .58 : .28;if(Math.abs(accum)>threshold){moved=true;if(holdTimer){clearTimeout(holdTimer);holdTimer=null}stopHoldVisual();const dir=accum>0?-1:1;const mag=Math.abs(accum);const step=mag>veryFast?10:(mag>fast?5:1);rotateDial(dir,step);accum=0}},{passive:false});
+canvas.addEventListener('pointerup',()=>{touchActive=false;if(holdTimer){clearTimeout(holdTimer);holdTimer=null}stopHoldVisual();if(moved){suppressClick=true;setTimeout(()=>suppressClick=false,90)}else if(!suppressClick)centerPress();suppressClick=false});
+canvas.addEventListener('wheel',e=>{e.preventDefault();const now=performance.now(),dt=now-lastWheelTime;lastWheelTime=now;const dir=e.deltaY<0?1:-1;const mag=Math.abs(e.deltaY);const step=(dt<38||mag>220)?10:((dt<85||mag>80)?5:1);rotateDial(dir,step)},{passive:false});
+document.getElementById('resSel').onchange=e=>{P=Number(e.target.value);showOverlay(900)};
+document.getElementById('rgb565Btn').onclick=e=>{simulateRGB565=!simulateRGB565;e.target.textContent=simulateRGB565?'RGB565 ON':'RGB565 OFF';showOverlay(900)};
+document.getElementById('resetBtn').onclick=resetAll;
+document.getElementById('saveBtn').onclick=saveHighResolutionCirclePNG;
+document.getElementById('freezeBtn').onclick=()=>{if(liveMode){updateLiveSource();frozen=!frozen;showOverlay(900)}};
+document.getElementById('cameraBtn').onclick=async()=>{try{if(!liveMode){liveStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720},facingMode:'environment'},audio:false});video.srcObject=liveStream;liveMode=true;frozen=false;showOverlay(1100)}else{liveStream?.getTracks().forEach(t=>t.stop());liveStream=null;liveMode=false;frozen=false;showOverlay(900)}}catch(err){alert('Camera failed. Use HTTPS/localhost or mobile browser permissions.')}};
+fileInput.addEventListener('change',()=>{const file=fileInput.files[0];if(!file)return;if(liveMode){liveStream?.getTracks().forEach(t=>t.stop());liveStream=null;liveMode=false;frozen=false}const img=new Image();img.onload=()=>{sourceCanvas.width=img.width;sourceCanvas.height=img.height;sourceCtx.drawImage(img,0,0);showOverlay(900);URL.revokeObjectURL(img.src)};img.src=URL.createObjectURL(file)});
+document.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();centerPress()}if(e.key==='Escape'||e.key==='Backspace'){e.preventDefault();longPress()}if(e.key.toLowerCase()==='r')resetAll();if(e.key.toLowerCase()==='o')fileInput.click()});
+createDefaultImage();drawFrame();
 </script>
 </body>
 </html>
