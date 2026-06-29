@@ -19,7 +19,7 @@ input[type=file]{display:none}
 </style>
 </head>
 <body>
-<div class="hint">FK17 OKO · stronger tonal halftone · image-derived palette</div>
+<div class="hint">FK17 OKO · high-contrast tonal halftone · image palette</div>
 <canvas id="screen" width="900" height="900"></canvas>
 <video id="video" autoplay playsinline muted></video>
 <div class="badge" id="perf">ESP 240 · -- ms</div>
@@ -315,8 +315,8 @@ function effectHalftoneExport(base,e,outSize,logicalGrid){
 
   const t=size/100;
   const cell=2.35 + Math.pow(t,1.22)*7.2;
-  const maxRad=cell*.63;
-  const minRad=cell*.035;
+  const maxRad=cell*.70;
+  const minRad=cell*.025;
   const scale=outSize/logicalGrid;
   const angle=(angleValue-50)/50*Math.PI/5;
 
@@ -331,7 +331,7 @@ function effectHalftoneExport(base,e,outSize,logicalGrid){
   const palSteps = palette>0 ? Math.max(3, Math.round(3 + palette*.9)) : 0;
 
   function toneCurve(v){
-    return clamp((v-.08)/.86,0,1);
+    return clamp((v-.20)/.62,0,1);
   }
   function q(v){
     if(!palSteps) return v;
@@ -362,7 +362,7 @@ function effectHalftoneExport(base,e,outSize,logicalGrid){
 
       const lum=(rr*.299+gg*.587+bb*.114)/255;
       const ink=toneCurve(1-lum);
-      const radius = ink<=.015 ? 0 : clamp(Math.pow(ink,.62)*maxRad,minRad,maxRad)*scale;
+      const radius = ink<=.035 ? 0 : clamp(Math.pow(ink,.45)*maxRad,minRad,maxRad)*scale;
       if(radius<=0) continue;
 
       let fill;
@@ -835,8 +835,8 @@ function effectHalftone(base,e){
   // close screen, strong light/shadow response, color sampled from the image.
   const t=size/100;
   const cell=2.35 + Math.pow(t,1.22)*7.2;     // closer dots than before
-  const maxRad=cell*.63;                       // darks can nearly touch
-  const minRad=cell*.035;
+  const maxRad=cell*.70;                       // darks can nearly touch
+  const minRad=cell*.025;
   const angle=(angleValue-50)/50*Math.PI/5;
 
   const out=makeCanvas(P),ox=out.getContext('2d');
@@ -851,8 +851,9 @@ function effectHalftone(base,e){
   const palSteps = palette>0 ? Math.max(3, Math.round(3 + palette*.9)) : 0;
 
   function toneCurve(v){
-    // Increases tonal contrast: shadows get much larger dots, highlights open up.
-    return clamp((v-.08)/.86,0,1);
+    // Higher contrast tonal response:
+    // highlights disappear earlier, shadows expand more aggressively.
+    return clamp((v-.20)/.62,0,1);
   }
   function q(v){
     if(!palSteps) return v;
@@ -886,7 +887,7 @@ function effectHalftone(base,e){
       const ink=toneCurve(1-lum);
 
       // Radius is the tone. Brights become tiny/no dots, darks become big close dots.
-      const radius = ink<=.015 ? 0 : clamp(Math.pow(ink,.62)*maxRad,minRad,maxRad);
+      const radius = ink<=.035 ? 0 : clamp(Math.pow(ink,.45)*maxRad,minRad,maxRad);
       if(radius<=0) continue;
 
       // Palette is now image-derived: averaged local color, optionally quantized.
