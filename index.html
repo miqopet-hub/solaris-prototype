@@ -19,7 +19,7 @@ input[type=file]{display:none}
 </style>
 </head>
 <body>
-<div class="hint">FK17 OKO · even all-side screen shadow · frame removed</div>
+<div class="hint">FK17 OKO · technical dither palettes + 9 algorithms</div>
 <canvas id="screen" width="900" height="900"></canvas>
 <video id="video" autoplay playsinline muted></video>
 <div class="badge" id="perf">ESP 240 · -- ms</div>
@@ -68,9 +68,9 @@ let lastFrameMS=0, lastFpsUpdate=0;
 
 const processes=[
   {name:'DITHER',params:[
-    {name:'AMOUNT',value:50,def:50,min:0,max:100,step:1},
-    {name:'COLOR',value:0,def:0,min:0,max:10,step:1},
-    {name:'DIFFUSE',value:50,def:50,min:0,max:100,step:1}
+    {name:'AMOUNT',value:100,def:100,min:0,max:100,step:1},
+    {name:'PALETTE',value:5,def:5,min:0,max:7,step:1,options:['MONO','WARM MONO','RGB','CMYK','GAME BOY','PIXLESS','VGA','MAC CLASSIC']},
+    {name:'ALGORITHM',value:4,def:4,min:0,max:8,step:1,options:['ORDERED','BAYER 2×2','BAYER 4×4','ATKINSON','FLOYD–STEINBERG','BURKES','SIERRA','JARVIS','STUCKI']}
   ]},
   {name:'HALFTONE',params:[
     {name:'SIZE',value:50,def:50,min:0,max:100,step:1},
@@ -101,7 +101,7 @@ function cpar(){return cp().params[paramIndex]}
 function showOverlay(ms=850){overlayUntil=performance.now()+ms}
 function rnd(s){s.value=(s.value*16807)%2147483647;return(s.value-1)/2147483646}
 function makeCanvas(w,h=w){let c=document.createElement('canvas');c.width=w;c.height=h;return c}
-function cloneParams(params){return params.map(p=>({name:p.name,value:p.value,def:p.def,min:p.min,max:p.max,step:p.step}))}
+function cloneParams(params){return params.map(p=>({name:p.name,value:p.value,def:p.def,min:p.min,max:p.max,step:p.step,options:Array.isArray(p.options)?p.options.slice():undefined}))}
 function neutralEffect(proc){return {name:proc.name,params:cloneParams(proc.params)}}
 function cloneEntry(e){return {name:e.name,params:cloneParams(e.params)}}
 function findStackIndex(name){return stack.findIndex(e=>e.name===name)}
@@ -143,12 +143,13 @@ function randInt(min,max){return Math.floor(Math.random()*(max-min+1))+min}
 function randomizeEntry(proc){
   const entry=neutralEffect(proc);
   for(const p of entry.params){
-    if(p.max===10){
+    if(Array.isArray(p.options)){
+      p.value=randInt(p.min,p.max);
+    }else if(p.max===10){
       p.value=randInt(p.min,p.max);
     }else{
       if(p.name==='SIZE') p.value=randInt(1,100);
-      else if(p.name==='AMOUNT') p.value=randInt(25,100);
-      else if(p.name==='DIFFUSE') p.value=randInt(20,100);
+      else if(p.name==='AMOUNT') p.value=randInt(35,100);
       else if(p.name==='MIX') p.value=randInt(20,100);
       else p.value=randInt(p.min,p.max);
     }
@@ -827,26 +828,140 @@ function applyEffect(img,e){
   return img;
 }
 function effectDither(base,e){
-  const amount=paramValue(e,'AMOUNT'),steps=Math.round(paramValue(e,'COLOR')),diff=paramValue(e,'DIFFUSE');
+  const amount=clamp(paramValue(e,'AMOUNT')/100,0,1);
+  const paletteIndex=Math.round(paramValue(e,'PALETTE'));
+  const algorithmIndex=Math.round(paramValue(e,'ALGORITHM'));
   if(amount<=0)return base;
-  const c=makeCanvas(P),cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(base,0,0);
-  let img=cx.getImageData(0,0,P,P),d=img.data,str=amount/100*diff/100;
-  if(steps>0){
-    const levels=Math.max(2,steps+1);const arr=new Int32Array(d.length);for(let i=0;i<d.length;i++)arr[i]=d[i]<<4;
-    for(let y=0;y<P-1;y++)for(let x=1;x<P-1;x++)for(let ch=0;ch<3;ch++){
-      const idx=(y*P+x)*4+ch,old=arr[idx],neu=Math.round((old>>4)/255*(levels-1))*(255/(levels-1)),err=(old-(neu<<4))*str;
-      arr[idx]=neu<<4;arr[idx+4]+=err*7/16;arr[idx+(P-1)*4]+=err*3/16;arr[idx+P*4]+=err*5/16;arr[idx+(P+1)*4]+=err/16;
+
+  const c=makeCanvas(P),cx=c.getContext('2d',{willReadFrequently:true});
+  cx.drawImage(base,0,0,P,P);
+  const original=cx.getImageData(0,0,P,P);
+  const src=original.data;
+
+  const palettes=[
+    [[18,18,18],[238,238,232]], // Mono
+    [[24,21,18],[116,88,52],[205,168,105],[242,226,188]], // Warm mono
+    [[0,0,0],[255,0,0],[0,255,0],[0,0,255],[255,255,0],[0,255,255],[255,0,255],[255,255,255]], // RGB
+    [[0,0,0],[0,174,239],[236,0,140],[255,242,0],[255,255,255]], // CMYK
+    [[15,56,15],[48,98,48],[139,172,15],[155,188,15]], // Game Boy
+    [[14,15,16],[31,49,52],[31,63,72],[50,86,78],[71,91,62],[96,83,54],[128,91,54],[165,103,58],[190,130,70],[220,190,130],[242,232,198]], // Pixless
+    [[0,0,0],[128,0,0],[0,128,0],[128,128,0],[0,0,128],[128,0,128],[0,128,128],[192,192,192],[128,128,128],[255,0,0],[0,255,0],[255,255,0],[0,0,255],[255,0,255],[0,255,255],[255,255,255]], // VGA
+    [[255,255,255],[255,255,0],[255,102,0],[221,0,0],[255,0,153],[51,0,153],[0,0,204],[0,153,255],[0,170,0],[0,102,0],[102,51,0],[153,102,51],[187,187,187],[136,136,136],[68,68,68],[0,0,0]] // Mac Classic
+  ];
+  const palette=palettes[clamp(paletteIndex,0,palettes.length-1)];
+
+  function prepare(r,g,b){
+    if(paletteIndex===5){
+      // Muted tiny-camera color treatment for PIXLESS.
+      const lum=r*.299+g*.587+b*.114;
+      const hi=clamp((lum-135)/120,0,1);
+      const sh=clamp((125-lum)/125,0,1);
+      r=(r-128)*1.08+128+hi*17-sh*10;
+      g=(g-128)*1.08+128+hi*7+sh*8;
+      b=(b-128)*1.08+128+hi*2+sh*15;
+      const avg=(r+g+b)/3,sat=.82;
+      r=avg+(r-avg)*sat; g=avg+(g-avg)*sat; b=avg+(b-avg)*sat;
     }
-    for(let i=0;i<d.length;i+=4){d[i]=clamp(arr[i]>>4,0,255);d[i+1]=clamp(arr[i+1]>>4,0,255);d[i+2]=clamp(arr[i+2]>>4,0,255)}
-  }else{
-    const gray=new Int32Array(P*P);for(let i=0,j=0;i<d.length;i+=4,j++)gray[j]=(d[i]*77+d[i+1]*150+d[i+2]*29);
-    for(let y=0;y<P-1;y++)for(let x=1;x<P-1;x++){
-      const idx=y*P+x,old=gray[idx],neu=old>127*256?255*256:0,err=(old-neu)*str;
-      gray[idx]=neu;gray[idx+1]+=err*7/16;gray[idx+P-1]+=err*3/16;gray[idx+P]+=err*5/16;gray[idx+P+1]+=err/16;
-    }
-    for(let i=0,j=0;i<d.length;i+=4,j++){let v=clamp(gray[j]>>8,0,255);d[i]=d[i+1]=d[i+2]=v}
+    return [clamp(r,0,255),clamp(g,0,255),clamp(b,0,255)];
   }
-  cx.putImageData(img,0,0);return c;
+
+  function nearest(r,g,b){
+    let best=palette[0],bestDist=Infinity;
+    const lum=r*.299+g*.587+b*.114;
+    for(const p of palette){
+      const dl=lum-(p[0]*.299+p[1]*.587+p[2]*.114);
+      const dr=r-p[0],dg=g-p[1],db=b-p[2];
+      const dist=dr*dr*.72+dg*dg*.92+db*db*.72+dl*dl*.75;
+      if(dist<bestDist){bestDist=dist;best=p;}
+    }
+    return best;
+  }
+
+  const work=new Float32Array(src.length);
+  for(let i=0;i<src.length;i+=4){
+    const p=prepare(src[i],src[i+1],src[i+2]);
+    work[i]=p[0];work[i+1]=p[1];work[i+2]=p[2];work[i+3]=255;
+  }
+
+  // Ordered threshold matrices.
+  const ordered3=[
+    [0,7,3],
+    [6,5,2],
+    [4,1,8]
+  ];
+  const bayer2=[
+    [0,2],
+    [3,1]
+  ];
+  const bayer4=[
+    [0,8,2,10],
+    [12,4,14,6],
+    [3,11,1,9],
+    [15,7,13,5]
+  ];
+
+  function orderedPass(matrix){
+    const mh=matrix.length,mw=matrix[0].length,maxVal=mw*mh;
+    for(let y=0;y<P;y++){
+      for(let x=0;x<P;x++){
+        const i=(y*P+x)*4;
+        const threshold=((matrix[y%mh][x%mw]+.5)/maxVal-.5)*72;
+        const q=nearest(
+          clamp(work[i]+threshold,0,255),
+          clamp(work[i+1]+threshold,0,255),
+          clamp(work[i+2]+threshold,0,255)
+        );
+        work[i]=q[0];work[i+1]=q[1];work[i+2]=q[2];
+      }
+    }
+  }
+
+  // Error-diffusion kernels: [dx,dy,weight], divisor.
+  const kernels=[
+    null,null,null,
+    {div:8, taps:[[1,0,1],[2,0,1],[-1,1,1],[0,1,1],[1,1,1],[0,2,1]]}, // Atkinson
+    {div:16,taps:[[1,0,7],[-1,1,3],[0,1,5],[1,1,1]]}, // Floyd–Steinberg
+    {div:32,taps:[[1,0,8],[2,0,4],[-2,1,2],[-1,1,4],[0,1,8],[1,1,4],[2,1,2]]}, // Burkes
+    {div:32,taps:[[1,0,5],[2,0,3],[-2,1,2],[-1,1,4],[0,1,5],[1,1,4],[2,1,2],[-1,2,2],[0,2,3],[1,2,2]]}, // Sierra
+    {div:48,taps:[[1,0,7],[2,0,5],[-2,1,3],[-1,1,5],[0,1,7],[1,1,5],[2,1,3],[-2,2,1],[-1,2,3],[0,2,5],[1,2,3],[2,2,1]]}, // Jarvis
+    {div:42,taps:[[1,0,8],[2,0,4],[-2,1,2],[-1,1,4],[0,1,8],[1,1,4],[2,1,2],[-2,2,1],[-1,2,2],[0,2,4],[1,2,2],[2,2,1]]} // Stucki
+  ];
+
+  if(algorithmIndex===0) orderedPass(ordered3);
+  else if(algorithmIndex===1) orderedPass(bayer2);
+  else if(algorithmIndex===2) orderedPass(bayer4);
+  else{
+    const kernel=kernels[clamp(algorithmIndex,3,8)];
+    for(let y=0;y<P;y++){
+      const reverse=y%2===1;
+      for(let xi=0;xi<P;xi++){
+        const x=reverse?(P-1-xi):xi;
+        const i=(y*P+x)*4;
+        const oldR=work[i],oldG=work[i+1],oldB=work[i+2];
+        const q=nearest(oldR,oldG,oldB);
+        const er=oldR-q[0],eg=oldG-q[1],eb=oldB-q[2];
+        work[i]=q[0];work[i+1]=q[1];work[i+2]=q[2];
+
+        for(const tap of kernel.taps){
+          const dx=reverse?-tap[0]:tap[0];
+          const nx=x+dx,ny=y+tap[1];
+          if(nx<0||nx>=P||ny<0||ny>=P)continue;
+          const ni=(ny*P+nx)*4,w=tap[2]/kernel.div;
+          work[ni]+=er*w;work[ni+1]+=eg*w;work[ni+2]+=eb*w;
+        }
+      }
+    }
+  }
+
+  const out=cx.createImageData(P,P);
+  for(let i=0;i<src.length;i+=4){
+    out.data[i]=clamp(src[i]*(1-amount)+work[i]*amount,0,255);
+    out.data[i+1]=clamp(src[i+1]*(1-amount)+work[i+1]*amount,0,255);
+    out.data[i+2]=clamp(src[i+2]*(1-amount)+work[i+2]*amount,0,255);
+    out.data[i+3]=src[i+3];
+  }
+  cx.putImageData(out,0,0);
+  return c;
 }
 function effectHalftone(base,e){
   const size=paramValue(e,'SIZE'),angleValue=paramValue(e,'ANGLE'),palette=Math.round(paramValue(e,'PALETTE'));
@@ -1258,7 +1373,11 @@ function drawLabels(){
     const p=currentParamFromDraft();
     textCenter(cp().name,C,C-screenR+96,12,'normal','rgba(245,220,150,.86)');
     textCenter(uiMode==='value'?p.name:'PARAMETERS',C,C-screenR+130,17,'bold','rgba(245,222,154,.92)');
-    textCenter(uiMode==='value'?Math.round(p.value):'TAP PARAMETER TO EDIT',C,C,uiMode==='value'?42:20,'bold',uiMode==='value'?'#f8f2df':'rgba(245,222,154,.82)');
+    const shownValue=uiMode==='value'
+      ? (Array.isArray(p.options) ? p.options[clamp(Math.round(p.value),0,p.options.length-1)] : Math.round(p.value))
+      : 'TAP PARAMETER TO EDIT';
+    const valueSize=uiMode==='value' && Array.isArray(p.options) ? (shownValue.length>14?24:shownValue.length>9?30:36) : (uiMode==='value'?42:20);
+    textCenter(shownValue,C,C,valueSize,'bold',uiMode==='value'?'#f8f2df':'rgba(245,222,154,.82)');
     textCenter(uiMode==='value'?'ROTATE VALUE · TAP APPLY':'ROTATE PARAM · HOLD CANCEL',C,C+42,11,'normal','rgba(235,205,125,.70)');
   }
 
@@ -1336,7 +1455,7 @@ function rotateDial(direction,step=1){
   }
   else{
     const p=currentParamFromDraft();
-    const st=p.max===10 ? 1 : step;
+    const st=Array.isArray(p.options) ? 1 : (p.max===10 ? 1 : step);
     p.value=clamp(p.value+direction*st,p.min,p.max);
     targetDialRot+=direction*.055;
   }
