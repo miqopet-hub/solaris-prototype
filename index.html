@@ -19,7 +19,7 @@ input[type=file]{display:none}
 </style>
 </head>
 <body>
-<div class="hint">FK17 OKO · technical dither palettes + 9 algorithms</div>
+<div class="hint">FK17 OKO · dither amount controls pattern coverage</div>
 <canvas id="screen" width="900" height="900"></canvas>
 <video id="video" autoplay playsinline muted></video>
 <div class="badge" id="perf">ESP 240 · -- ms</div>
@@ -953,13 +953,36 @@ function effectDither(base,e){
     }
   }
 
+  // AMOUNT controls spatial dither coverage rather than simply blending colors.
+  // Low values dither fewer pixels; 100 applies the full pattern.
+  const coverageMatrix=[
+    [ 0,32, 8,40, 2,34,10,42],
+    [48,16,56,24,50,18,58,26],
+    [12,44, 4,36,14,46, 6,38],
+    [60,28,52,20,62,30,54,22],
+    [ 3,35,11,43, 1,33, 9,41],
+    [51,19,59,27,49,17,57,25],
+    [15,47, 7,39,13,45, 5,37],
+    [63,31,55,23,61,29,53,21]
+  ];
+
   const out=cx.createImageData(P,P);
-  for(let i=0;i<src.length;i+=4){
-    out.data[i]=clamp(src[i]*(1-amount)+work[i]*amount,0,255);
-    out.data[i+1]=clamp(src[i+1]*(1-amount)+work[i+1]*amount,0,255);
-    out.data[i+2]=clamp(src[i+2]*(1-amount)+work[i+2]*amount,0,255);
-    out.data[i+3]=src[i+3];
+  const coverage=amount*64;
+  const softBand=5;
+
+  for(let y=0;y<P;y++){
+    for(let x=0;x<P;x++){
+      const i=(y*P+x)*4;
+      const threshold=coverageMatrix[y&7][x&7];
+      const mix=clamp((coverage-threshold+softBand*.5)/softBand,0,1);
+
+      out.data[i]=clamp(src[i]*(1-mix)+work[i]*mix,0,255);
+      out.data[i+1]=clamp(src[i+1]*(1-mix)+work[i+1]*mix,0,255);
+      out.data[i+2]=clamp(src[i+2]*(1-mix)+work[i+2]*mix,0,255);
+      out.data[i+3]=src[i+3];
+    }
   }
+
   cx.putImageData(out,0,0);
   return c;
 }
