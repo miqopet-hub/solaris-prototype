@@ -840,8 +840,27 @@ Changes:
     Stronger local tonal separation while retaining more image structure.
 
 
+its still not quite what I want the pixels are too big, and for some reason the size is only up to 8
+
+Fixed.
+
+Changes:
+
+    Size now goes from 1–20
+
+    Pixels/glyphs are much smaller overall
+
+    The finest settings preserve substantially more image detail
+
+    Crosses and dots are thinner and more compact
+
+    Higher Size values still allow a coarser pattern
+
+    RANDOM now uses the expanded Size range appropriately
+
+
 Library
-/fk17_oko_simulator_v48_detailed_cross_dot_dither.html
+/fk17_oko_simulator_v49_finer_pixels_size_1_to_20.html
 
 <!doctype html>
 <html lang="en">
@@ -864,7 +883,7 @@ input[type=file]{display:none}
 </style>
 </head>
 <body>
-<div class="hint">FK17 OKO · detailed cross-dot duotone screen</div>
+<div class="hint">FK17 OKO · finer cross-dot screen · SIZE 1–20</div>
 <canvas id="screen" width="900" height="900"></canvas>
 <video id="video" autoplay playsinline muted></video>
 <div class="badge" id="perf">ESP 240 · -- ms</div>
@@ -913,7 +932,7 @@ let lastFrameMS=0, lastFpsUpdate=0;
 
 const processes=[
   {name:'DITHER',params:[
-    {name:'SIZE',value:4,def:4,min:1,max:8,step:1,forceSingleStep:true},
+    {name:'SIZE',value:5,def:5,min:1,max:20,step:1,forceSingleStep:true},
     {name:'THRESHOLD',value:52,def:52,min:0,max:100,step:1,forceSingleStep:true},
     {name:'DETAIL',value:68,def:68,min:0,max:100,step:1,forceSingleStep:true}
   ]},
@@ -993,7 +1012,7 @@ function randomizeEntry(proc){
     }else if(p.max===10){
       p.value=randInt(p.min,p.max);
     }else{
-      if(p.name==='SIZE') p.value=randInt(1,8);
+      if(p.name==='SIZE') p.value=randInt(2,16);
       else if(p.name==='THRESHOLD') p.value=randInt(35,65);
       else if(p.name==='DETAIL') p.value=randInt(40,90);
       else if(p.name==='AMOUNT') p.value=randInt(35,100);
@@ -1675,13 +1694,13 @@ function applyEffect(img,e){
   return img;
 }
 function effectDither(base,e){
-  const size=clamp(Math.round(paramValue(e,'SIZE')),1,8);
+  const size=clamp(Math.round(paramValue(e,'SIZE')),1,20);
   const threshold=clamp(paramValue(e,'THRESHOLD'),0,100);
   const detail=clamp(paramValue(e,'DETAIL'),0,100);
 
   // Detailed duotone screen inspired by the reference:
   // dense micro-dots, x-marks and crosses that vary by luminance.
-  const logicalScale=1.0 + (8-size)*.16;
+  const logicalScale=1.15 + (20-size)*.035;
   const w=Math.max(120,Math.round(P*logicalScale));
   const h=w;
 
@@ -1736,7 +1755,7 @@ function effectDither(base,e){
   ox.fillStyle='#d7dfc6';
 
   // SIZE changes glyph spacing, not image resolution.
-  const cell=clamp(2.2+size*.55,2.6,6.6);
+  const cell=clamp(1.30+size*.14,1.45,4.10);
   const cols=Math.ceil(P/cell);
   const rows=Math.ceil(P/cell);
 
@@ -1788,27 +1807,27 @@ function effectDither(base,e){
       if(occupancy<=ordered) continue;
 
       const phase=(gx+gy*3)&3;
-      const base=Math.min(cell*.46,3.0);
+      const base=Math.min(cell*.38,1.75);
 
       if(v<.22){
-        drawDot(cx,cy,Math.max(.38,cell*.075));
+        drawDot(cx,cy,Math.max(.22,cell*.065));
       }else if(v<.40){
         if(phase===0 || phase===3){
-          drawX(cx,cy,base*.48,Math.max(.45,cell*.085));
+          drawX(cx,cy,base*.46,Math.max(.26,cell*.075));
         }else{
-          drawDot(cx,cy,Math.max(.48,cell*.095));
+          drawDot(cx,cy,Math.max(.28,cell*.085));
         }
       }else if(v<.62){
         if(phase===1 || phase===2){
-          drawPlus(cx,cy,base*.60,Math.max(.5,cell*.10));
+          drawPlus(cx,cy,base*.58,Math.max(.28,cell*.085));
         }else{
-          drawX(cx,cy,base*.58,Math.max(.5,cell*.10));
+          drawX(cx,cy,base*.56,Math.max(.28,cell*.085));
         }
       }else if(v<.82){
-        drawPlus(cx,cy,base*.78,Math.max(.62,cell*.13));
-        if(phase===0) drawDot(cx,cy,Math.max(.42,cell*.07));
+        drawPlus(cx,cy,base*.72,Math.max(.34,cell*.105));
+        if(phase===0) drawDot(cx,cy,Math.max(.24,cell*.06));
       }else{
-        const s=Math.min(cell*.78,5.0);
+        const s=Math.min(cell*.68,2.8);
         ox.fillRect(cx-s*.5,cy-s*.5,s,s);
         if(phase===0 || phase===2){
           ox.clearRect(cx-cell*.10,cy-cell*.10,cell*.20,cell*.20);
