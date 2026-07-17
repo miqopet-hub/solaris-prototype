@@ -255,6 +255,13 @@ input[type=file]{display:none}
   background:#f3f3f3;
   border:6px solid #181a1f;
   box-shadow:0 0 0 3px #cfcfcf,0 3px 12px rgba(0,0,0,.45);
+  transition:transform .12s ease,background .12s ease,border-radius .12s ease;
+}
+.shutterAction.recording{
+  background:#ff453a;
+  border-radius:17px;
+  transform:scale(.82);
+  box-shadow:0 0 0 4px rgba(255,69,58,.25);
 }
 .effectDelete{
   position:absolute;
@@ -279,6 +286,85 @@ input[type=file]{display:none}
   color:inherit;
   padding:0;
   text-align:left;
+}
+
+
+@media (max-width:430px) and (max-height:900px){
+  html,body{height:100%;overflow:hidden}
+  .app{
+    width:100%;
+    height:100dvh;
+    min-height:0;
+    overflow:hidden;
+    padding:max(5px,env(safe-area-inset-top)) 9px max(6px,env(safe-area-inset-bottom));
+    gap:5px;
+  }
+  .header{height:34px;min-height:34px}
+  .brand small{font-size:9px;margin-bottom:1px}
+  .brand strong{font-size:19px}
+  .dialStage{
+    width:min(100%,330px);
+    margin:0 auto;
+    flex:0 0 auto;
+  }
+  .effectPill{
+    height:38px;
+    margin:-7px auto 0;
+    width:min(250px,72%);
+  }
+  .effectPill button{font-size:23px}
+  .effectName{font-size:12px}
+  .effectDots{font-size:10px}
+  .panel{border-radius:14px}
+  .paramRow{
+    min-height:47px;
+    padding:4px 8px;
+    grid-template-columns:78px 29px 1fr 29px 27px;
+    gap:5px;
+  }
+  .paramText strong{font-size:12px}
+  .paramText small{display:none}
+  .step{width:28px;height:28px;font-size:17px}
+  .value{font-size:13px}
+  .randomStandalone{
+    min-height:34px;
+    height:34px;
+    border-radius:12px;
+    font-size:12px;
+  }
+  .stackHeader{height:17px;padding:0 3px;font-size:10px}
+  .stack{gap:5px;min-height:48px}
+  .card{
+    min-width:105px;
+    height:47px;
+    padding:6px 8px;
+    border-radius:10px;
+    font-size:9px;
+  }
+  .card strong{font-size:10px;margin-bottom:3px}
+  .card.add{min-width:48px;font-size:20px}
+  .effectDelete{
+    width:19px;height:19px;top:3px;right:3px;font-size:13px;
+  }
+  .cameraBar{
+    border-radius:14px;
+    padding:4px;
+    gap:4px;
+  }
+  .cameraBar button,.cameraBar label{
+    min-height:43px;
+    border-radius:10px;
+    gap:2px;
+    font-size:9px;
+  }
+  .status{min-height:14px;font-size:9px;line-height:14px}
+  .screenAction{
+    width:46px;
+    height:46px;
+    bottom:1.4%;
+  }
+  .resetAction{left:8%;font-size:19px}
+  .shutterAction{right:8%;border-width:5px}
 }
 
 </style>
@@ -485,8 +571,8 @@ function ditherEffect(input,e){
   for(let i=0,j=0;i<d.length;i+=4,j++)lum[j]=d[i]*.299+d[i+1]*.587+d[i+2]*.114;
 
   const out=document.createElement('canvas');out.width=w;out.height=h;
-  const ox=out.getContext('2d');ox.fillStyle='#020302';ox.fillRect(0,0,w,h);
-  ox.fillStyle='#c9d6ad';
+  const ox=out.getContext('2d');ox.fillStyle='#10140e';ox.fillRect(0,0,w,h);
+  ox.fillStyle='#e5edd4';
 
   const cell=1.2+size*.18;
   const bayer=[[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
@@ -503,7 +589,9 @@ function ditherEffect(input,e){
         for(let yy=y0;yy<=y1;yy++)for(let xx=x0;xx<=x1;xx++){a+=lum[yy*w+xx];n++}
         v+=(v-a/n)*(detail/100)*1.7;
       }
-      v=(v-(threshold-50)*2.0-128)*(1+detail/100*.65)+128;
+      // Exposure compensation: lift dark/mid tones before thresholding.
+      v=Math.pow(clamp(v/255,0,1),0.82)*255+12;
+      v=(v-(threshold-50)*1.35-128)*(1+detail/100*.52)+128;
       const t=(bayer[gy&3][gx&3]+.5)/16;
       const q=clamp(v/255,0,1);
       if(q<=t)continue;
@@ -943,7 +1031,7 @@ async function toggleRecording(){
     };
     recorder.start();
     recording=true;
-    setStatus('Recording — hold shutter again to stop');
+    setStatus('Recording — release shutter to stop');
   }catch(err){console.error(err);setStatus('Recording failed')}
 }
 
@@ -961,46 +1049,70 @@ document.getElementById('saveButton').onclick=saveImage;
 // Shutter: short press captures/saves a photo; long press starts/stops video.
 const shutter=document.getElementById('shutterButton');
 
+async function beginHoldRecording(){
+  if(!shutterPointerDown || recording)return;
+  shutterHoldTriggered=true;
+
+  if(!stream){
+    await startCamera();
+    if(!stream){
+      shutterHoldTriggered=false;
+      return;
+    }
+  }
+
+  frozen=false;
+  await toggleRecording();
+  shutter.classList.add('recording');
+  setStatus('Recording — release shutter to stop');
+  try{navigator.vibrate?.(25)}catch(_){}
+}
+
 shutter.addEventListener('pointerdown',e=>{
   e.preventDefault();
+  e.stopPropagation();
   shutterPointerDown=true;
   shutterHoldTriggered=false;
   shutter.setPointerCapture(e.pointerId);
   clearTimeout(shutterHoldTimer);
 
-  shutterHoldTimer=setTimeout(async()=>{
-    if(!shutterPointerDown)return;
-    shutterHoldTriggered=true;
-
-    if(!stream){
-      await startCamera();
-      if(!stream)return;
-    }
-
-    await toggleRecording();
-    try{navigator.vibrate?.(35)}catch(_){}
-  },700);
+  // QuickTake behavior: hold to record, release to stop.
+  shutterHoldTimer=setTimeout(beginHoldRecording,360);
 });
 
-shutter.addEventListener('pointerup',e=>{
+shutter.addEventListener('pointerup',async e=>{
   e.preventDefault();
+  e.stopPropagation();
   shutterPointerDown=false;
   clearTimeout(shutterHoldTimer);
 
-  if(shutterHoldTriggered)return;
+  if(shutterHoldTriggered){
+    if(recording) await toggleRecording();
+    shutter.classList.remove('recording');
+    shutterHoldTriggered=false;
+    return;
+  }
 
-  // Freeze the current live frame before saving the photo.
+  // Short tap captures and displays the processed still. It does not save.
   if(stream){
     updateVideoSource();
     frozen=true;
+    requestRender();
+    setStatus('Photo captured — tap Save when ready');
+  }else{
+    // For an uploaded image, keep the current processed preview.
+    frozen=true;
+    requestRender();
+    setStatus('Preview captured — tap Save when ready');
   }
-  saveImage();
-  requestRender();
 });
 
-shutter.addEventListener('pointercancel',()=>{
+shutter.addEventListener('pointercancel',async()=>{
   shutterPointerDown=false;
   clearTimeout(shutterHoldTimer);
+  if(shutterHoldTriggered && recording) await toggleRecording();
+  shutter.classList.remove('recording');
+  shutterHoldTriggered=false;
 });
 function resetAllState(){
   stack=[];
