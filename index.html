@@ -592,11 +592,16 @@ function ditherEffect(input,e){
       // Exposure compensation: lift dark/mid tones before thresholding.
       v=Math.pow(clamp(v/255,0,1),0.82)*255+12;
       v=(v-(threshold-50)*1.35-128)*(1+detail/100*.52)+128;
-      const t=(bayer[gy&3][gx&3]+.5)/16;
+      // Blue-noise style threshold to avoid visible Bayer grid.
+      const n=((gx*374761393 ^ gy*668265263)>>>0);
+      const rnd=((n^(n>>13))*1274126177>>>0)/4294967295;
+      const t=rnd;
       const q=clamp(v/255,0,1);
       if(q<=t)continue;
 
-      const cx=(gx+.5)*cell,cy=(gy+.5)*cell;
+      const jx=(((((gx*928371+gy*1237)>>>0)&255)/255)-0.5)*cell*0.22;
+      const jy=(((((gx*32191+gy*8731)>>>0)&255)/255)-0.5)*cell*0.22;
+      const cx=(gx+.5)*cell+jx,cy=(gy+.5)*cell+jy;
       const phase=(gx+gy*3)&3;
       const arm=Math.max(.38,cell*.28);
       const thick=Math.max(.28,cell*.075);
