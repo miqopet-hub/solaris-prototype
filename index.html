@@ -233,36 +233,7 @@ input[type=file]{display:none}
   color:#fff;
   font-size:14px;
 }
-.screenAction{
-  position:absolute;
-  z-index:10;
-  bottom:1.7%;
-  width:54px;
-  height:54px;
-  border-radius:50%;
-  touch-action:none;
-}
-.resetAction{
-  left:10%;
-  border:1px solid rgba(255,255,255,.18);
-  background:#171a1f;
-  color:#fff;
-  font-size:23px;
-  box-shadow:0 3px 12px rgba(0,0,0,.45);
-}
-.shutterAction{
-  right:10%;
-  background:#f3f3f3;
-  border:6px solid #181a1f;
-  box-shadow:0 0 0 3px #cfcfcf,0 3px 12px rgba(0,0,0,.45);
-  transition:transform .12s ease,background .12s ease,border-radius .12s ease;
-}
-.shutterAction.recording{
-  background:#ff453a;
-  border-radius:17px;
-  transform:scale(.82);
-  box-shadow:0 0 0 4px rgba(255,69,58,.25);
-}
+
 .effectDelete{
   position:absolute;
   top:7px;
@@ -295,21 +266,22 @@ input[type=file]{display:none}
     width:100%;
     height:100dvh;
     min-height:0;
-    overflow:hidden;
-    padding:max(5px,env(safe-area-inset-top)) 9px max(6px,env(safe-area-inset-bottom));
+    overflow-y:auto;
+    overflow-x:hidden;
+    padding:max(4px,env(safe-area-inset-top)) 9px max(6px,env(safe-area-inset-bottom));
     gap:5px;
   }
   .header{height:34px;min-height:34px}
   .brand small{font-size:9px;margin-bottom:1px}
   .brand strong{font-size:19px}
   .dialStage{
-    width:min(100%,330px);
+    width:min(100%,292px);
     margin:0 auto;
     flex:0 0 auto;
   }
   .effectPill{
-    height:38px;
-    margin:-7px auto 0;
+    height:36px;
+    margin:0;
     width:min(250px,72%);
   }
   .effectPill button{font-size:23px}
@@ -317,8 +289,8 @@ input[type=file]{display:none}
   .effectDots{font-size:10px}
   .panel{border-radius:14px}
   .paramRow{
-    min-height:47px;
-    padding:4px 8px;
+    min-height:42px;
+    padding:3px 7px;
     grid-template-columns:78px 29px 1fr 29px 27px;
     gap:5px;
   }
@@ -367,6 +339,60 @@ input[type=file]{display:none}
   .shutterAction{right:8%;border-width:5px}
 }
 
+
+.effectControlRow{
+  display:grid;
+  grid-template-columns:52px minmax(0,1fr) 52px;
+  align-items:center;
+  gap:8px;
+}
+.effectControlRow .effectPill{
+  margin:0;
+  width:100%;
+}
+.rowAction{
+  width:52px;
+  height:52px;
+  border-radius:50%;
+  border:1px solid rgba(255,255,255,.16);
+  display:grid;
+  place-items:center;
+  touch-action:none;
+}
+.resetAction{
+  background:#171a1f;
+  color:#fff;
+  font-size:23px;
+}
+.shutterAction{
+  background:#f3f3f3;
+  border:6px solid #181a1f;
+  box-shadow:0 0 0 3px #cfcfcf;
+  transition:transform .12s ease,background .12s ease,border-radius .12s ease;
+}
+.shutterAction.recording{
+  background:#ff453a;
+  border-radius:15px;
+  transform:scale(.82);
+  box-shadow:0 0 0 4px rgba(255,69,58,.25);
+}
+
+
+@media (max-width:430px) and (max-height:900px){
+  .effectControlRow{
+    grid-template-columns:44px minmax(0,1fr) 44px;
+    gap:6px;
+  }
+  .rowAction{
+    width:44px;
+    height:44px;
+  }
+  .resetAction{font-size:19px}
+  .shutterAction{border-width:5px}
+  .panel{flex:0 0 auto}
+  .paramRow:nth-child(3){display:grid!important}
+}
+
 </style>
 </head>
 <body>
@@ -383,17 +409,19 @@ input[type=file]{display:none}
     <div class="indexMarker"></div>
     <div class="holdRing" id="holdRing"></div>
     <div class="previewWrap"><canvas id="preview"></canvas></div>
-    <button class="screenAction resetAction" id="resetButton" type="button" aria-label="Reset">↺</button>
-    <button class="screenAction shutterAction" id="shutterButton" type="button" aria-label="Photo. Hold for video"></button>
   </section>
 
-  <section class="effectPill">
-    <button id="prevEffect" aria-label="Previous effect">‹</button>
-    <div class="effectCenter">
-      <div class="effectName" id="effectName">DITHER</div>
-      <div class="effectDots" id="effectDots"></div>
+  <section class="effectControlRow">
+    <button class="rowAction resetAction" id="resetButton" type="button" aria-label="Reset">↺</button>
+    <div class="effectPill">
+      <button id="prevEffect" aria-label="Previous effect">‹</button>
+      <div class="effectCenter">
+        <div class="effectName" id="effectName">DITHER</div>
+        <div class="effectDots" id="effectDots"></div>
+      </div>
+      <button id="nextEffect" aria-label="Next effect">›</button>
     </div>
-    <button id="nextEffect" aria-label="Next effect">›</button>
+    <button class="rowAction shutterAction" id="shutterButton" type="button" aria-label="Photo. Hold for video"></button>
   </section>
 
   <section class="panel" id="paramsPanel"></section>
@@ -419,8 +447,8 @@ input[type=file]{display:none}
 const EFFECTS = [
   {name:'DITHER', params:[
     {name:'Size',min:1,max:20,value:5,step:1},
-    {name:'Threshold',min:0,max:100,value:52,step:1},
-    {name:'Detail',min:0,max:100,value:68,step:1}
+    {name:'Colors',min:0,max:10,value:5,step:1},
+    {name:'Detail',min:0,max:100,value:55,step:1}
   ]},
   {name:'HALFTONE', params:[
     {name:'Size',min:1,max:20,value:7,step:1},
@@ -561,63 +589,193 @@ function getParam(effect,name){
 
 function ditherEffect(input,e){
   const size=getParam(e,'Size');
-  const threshold=getParam(e,'Threshold');
+  const colorValue=getParam(e,'Colors');
   const detail=getParam(e,'Detail');
   const w=input.width,h=input.height;
   const srcCtx=input.getContext('2d',{willReadFrequently:true});
-  const img=srcCtx.getImageData(0,0,w,h);
-  const d=img.data;
-  const lum=new Float32Array(w*h);
-  for(let i=0,j=0;i<d.length;i+=4,j++)lum[j]=d[i]*.299+d[i+1]*.587+d[i+2]*.114;
+  const src=srcCtx.getImageData(0,0,w,h);
+  const d=src.data;
 
-  const out=document.createElement('canvas');out.width=w;out.height=h;
-  const ox=out.getContext('2d');ox.fillStyle='#10140e';ox.fillRect(0,0,w,h);
-  ox.fillStyle='#e5edd4';
+  const out=document.createElement('canvas');
+  out.width=w;out.height=h;
+  const ox=out.getContext('2d',{willReadFrequently:true});
+  const outImg=ox.createImageData(w,h);
+  const od=outImg.data;
 
-  const cell=1.2+size*.18;
-  const bayer=[[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
-  const cols=Math.ceil(w/cell),rows=Math.ceil(h/cell);
-  for(let gy=0;gy<rows;gy++){
-    for(let gx=0;gx<cols;gx++){
-      const x=Math.min(w-1,Math.floor((gx+.5)*cell));
-      const y=Math.min(h-1,Math.floor((gy+.5)*cell));
-      const idx=y*w+x;
-      let v=lum[idx];
+  // Stage 1: exposure/detail preparation.
+  const prepared=new Float32Array(w*h*3);
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const i=(y*w+x)*4;
+      const p=(y*w+x)*3;
+
+      let r=Math.pow(d[i]/255,0.67)*255+24;
+      let g=Math.pow(d[i+1]/255,0.67)*255+24;
+      let b=Math.pow(d[i+2]/255,0.67)*255+24;
+
       if(detail>0){
-        const x0=Math.max(0,x-1),x1=Math.min(w-1,x+1),y0=Math.max(0,y-1),y1=Math.min(h-1,y+1);
-        let a=0,n=0;
-        for(let yy=y0;yy<=y1;yy++)for(let xx=x0;xx<=x1;xx++){a+=lum[yy*w+xx];n++}
-        v+=(v-a/n)*(detail/100)*1.7;
+        const x0=Math.max(0,x-1),x1=Math.min(w-1,x+1);
+        const y0=Math.max(0,y-1),y1=Math.min(h-1,y+1);
+        let ar=0,ag=0,ab=0,n=0;
+        for(let yy=y0;yy<=y1;yy++){
+          for(let xx=x0;xx<=x1;xx++){
+            const j=(yy*w+xx)*4;
+            ar+=d[j];ag+=d[j+1];ab+=d[j+2];n++;
+          }
+        }
+        const amount=(detail/100)*0.42;
+        r+=(r-ar/n)*amount;
+        g+=(g-ag/n)*amount;
+        b+=(b-ab/n)*amount;
       }
-      // Exposure compensation: lift dark/mid tones before thresholding.
-      v=Math.pow(clamp(v/255,0,1),0.82)*255+12;
-      v=(v-(threshold-50)*1.35-128)*(1+detail/100*.52)+128;
-      // Blue-noise style threshold to avoid visible Bayer grid.
-      const n=((gx*374761393 ^ gy*668265263)>>>0);
-      const rnd=((n^(n>>13))*1274126177>>>0)/4294967295;
-      const t=rnd;
-      const q=clamp(v/255,0,1);
-      if(q<=t)continue;
 
-      const jx=(((((gx*928371+gy*1237)>>>0)&255)/255)-0.5)*cell*0.22;
-      const jy=(((((gx*32191+gy*8731)>>>0)&255)/255)-0.5)*cell*0.22;
-      const cx=(gx+.5)*cell+jx,cy=(gy+.5)*cell+jy;
-      const phase=(gx+gy*3)&3;
-      const arm=Math.max(.38,cell*.28);
-      const thick=Math.max(.28,cell*.075);
-      if(q<.34){
-        ox.beginPath();ox.arc(cx,cy,Math.max(.25,cell*.065),0,Math.PI*2);ox.fill();
-      }else if(q<.70){
-        ox.save();ox.translate(cx,cy);ox.rotate(phase%2?Math.PI/4:0);
-        ox.fillRect(-arm,-thick/2,arm*2,thick);
-        ox.fillRect(-thick/2,-arm,thick,arm*2);
-        ox.restore();
-      }else{
-        const s=Math.max(.8,cell*.48);
-        ox.fillRect(cx-s/2,cy-s/2,s,s);
+      if(colorValue===0){
+        const l=r*.299+g*.587+b*.114;
+        r=g=b=l;
+      }
+
+      prepared[p]=clamp(r,0,255);
+      prepared[p+1]=clamp(g,0,255);
+      prepared[p+2]=clamp(b,0,255);
+    }
+  }
+
+  // Stage 2: build a limited adaptive palette first (posterization).
+  const paletteSize=colorValue===0 ? 2 : colorValue+2;
+  const samples=[];
+  const sampleStep=Math.max(1,Math.floor(Math.sqrt((w*h)/2200)));
+  for(let y=0;y<h;y+=sampleStep){
+    for(let x=0;x<w;x+=sampleStep){
+      const p=(y*w+x)*3;
+      samples.push([prepared[p],prepared[p+1],prepared[p+2]]);
+    }
+  }
+
+  let palette=[];
+  for(let k=0;k<paletteSize;k++){
+    const index=Math.min(samples.length-1,Math.floor((k+.5)*samples.length/paletteSize));
+    palette.push(samples[index].slice());
+  }
+
+  for(let iteration=0;iteration<6;iteration++){
+    const sums=Array.from({length:paletteSize},()=>[0,0,0,0]);
+    for(const c of samples){
+      let best=0,bestDist=Infinity;
+      for(let k=0;k<palette.length;k++){
+        const p=palette[k];
+        const dr=c[0]-p[0],dg=c[1]-p[1],db=c[2]-p[2];
+        const dist=dr*dr*.30+dg*dg*.59+db*db*.11;
+        if(dist<bestDist){bestDist=dist;best=k}
+      }
+      sums[best][0]+=c[0];
+      sums[best][1]+=c[1];
+      sums[best][2]+=c[2];
+      sums[best][3]++;
+    }
+    for(let k=0;k<palette.length;k++){
+      if(sums[k][3]){
+        palette[k][0]=sums[k][0]/sums[k][3];
+        palette[k][1]=sums[k][1]/sums[k][3];
+        palette[k][2]=sums[k][2]/sums[k][3];
       }
     }
   }
+
+  palette.sort((a,b)=>
+    (a[0]*.299+a[1]*.587+a[2]*.114)-
+    (b[0]*.299+b[1]*.587+b[2]*.114)
+  );
+
+  // Stage 3: spatially-scaled error diffusion over the posterized palette.
+  // Size controls visible dither grain by processing blocks.
+  const block=Math.max(1,Math.round(1+size*0.42));
+  const bw=Math.ceil(w/block),bh=Math.ceil(h/block);
+  const work=new Float32Array(bw*bh*3);
+
+  for(let by=0;by<bh;by++){
+    for(let bx=0;bx<bw;bx++){
+      let sr=0,sg=0,sb=0,n=0;
+      const xStart=bx*block,yStart=by*block;
+      for(let yy=yStart;yy<Math.min(h,yStart+block);yy++){
+        for(let xx=xStart;xx<Math.min(w,xStart+block);xx++){
+          const p=(yy*w+xx)*3;
+          sr+=prepared[p];sg+=prepared[p+1];sb+=prepared[p+2];n++;
+        }
+      }
+      const q=(by*bw+bx)*3;
+      work[q]=sr/n;work[q+1]=sg/n;work[q+2]=sb/n;
+    }
+  }
+
+  function nearestColor(r,g,b){
+    let best=palette[0],bestDist=Infinity;
+    for(let k=0;k<palette.length;k++){
+      const p=palette[k];
+      const dr=r-p[0],dg=g-p[1],db=b-p[2];
+      const dist=dr*dr*.30+dg*dg*.59+db*db*.11;
+      if(dist<bestDist){bestDist=dist;best=p}
+    }
+    return best;
+  }
+
+  const quantized=new Float32Array(bw*bh*3);
+  for(let y=0;y<bh;y++){
+    const reverse=(y&1)===1;
+    for(let stepX=0;stepX<bw;stepX++){
+      const x=reverse ? bw-1-stepX : stepX;
+      const i=(y*bw+x)*3;
+
+      let r=clamp(work[i],0,255);
+      let g=clamp(work[i+1],0,255);
+      let b=clamp(work[i+2],0,255);
+
+      const qc=nearestColor(r,g,b);
+      quantized[i]=qc[0];
+      quantized[i+1]=qc[1];
+      quantized[i+2]=qc[2];
+
+      const er=r-qc[0],eg=g-qc[1],eb=b-qc[2];
+
+      const spread=(nx,ny,f)=>{
+        if(nx<0||nx>=bw||ny<0||ny>=bh)return;
+        const j=(ny*bw+nx)*3;
+        work[j]+=er*f;
+        work[j+1]+=eg*f;
+        work[j+2]+=eb*f;
+      };
+
+      // Floyd–Steinberg, mirrored every other row.
+      if(!reverse){
+        spread(x+1,y,7/16);
+        spread(x-1,y+1,3/16);
+        spread(x,y+1,5/16);
+        spread(x+1,y+1,1/16);
+      }else{
+        spread(x-1,y,7/16);
+        spread(x+1,y+1,3/16);
+        spread(x,y+1,5/16);
+        spread(x-1,y+1,1/16);
+      }
+    }
+  }
+
+  // Stage 4: expand the dithered blocks back to full resolution.
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const bx=Math.floor(x/block),by=Math.floor(y/block);
+      const q=(by*bw+bx)*3;
+      const i=(y*w+x)*4;
+
+      // Preserve a small amount of source detail so stacking stays usable.
+      const mix=.9;
+      od[i]=clamp(d[i]*(1-mix)+quantized[q]*mix,0,255);
+      od[i+1]=clamp(d[i+1]*(1-mix)+quantized[q+1]*mix,0,255);
+      od[i+2]=clamp(d[i+2]*(1-mix)+quantized[q+2]*mix,0,255);
+      od[i+3]=255;
+    }
+  }
+
+  ox.putImageData(outImg,0,0);
   return out;
 }
 
@@ -1126,7 +1284,7 @@ function resetAllState(){
   frozen=false;
 
   EFFECTS.forEach((e,ei)=>e.params.forEach((p,pi)=>p.value=[
-    [5,52,68],[7,50,0],[5,100],[8,25],[25,1],[100]
+    [5,5,55],[7,50,0],[5,100],[8,25],[25,1],[100]
   ][ei][pi]));
 
   tickRing.style.transform='rotate(0deg)';
