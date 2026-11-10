@@ -393,6 +393,160 @@ input[type=file]{display:none}
   .paramRow:nth-child(3){display:grid!important}
 }
 
+/* ------------------------------------------------------------------
+   Long-press / selection hygiene for touch hardware (Android + iOS).
+   ------------------------------------------------------------------ */
+body{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+button:focus{outline:none}
+button:focus-visible{outline:1px solid rgba(255,255,255,.5);outline-offset:2px}
+
+/* ------------------------------------------------------------------
+   SQUARE MODE — primary target: Unihertz Titan 2 Elite.
+   4.03" 1080×1200 panel (~0.9 w/h). In Chrome, with status bar,
+   toolbar and gesture bar taken, the usable viewport is roughly
+   411×350 CSS px — wider than tall — so the portrait column above
+   cannot fit without scrolling. Here the dial gets the largest square
+   the viewport allows; parameters + stack sit in a side column; the
+   effect row (reset · effect · shutter) spans the full width so the
+   shutter lands under the right thumb.
+   Applies to any viewport at least 4:5 (w/h), which includes desktop
+   browser windows, so development on desktop uses the same layout.
+   ------------------------------------------------------------------ */
+@media (min-aspect-ratio: 4/5){
+  html,body{height:100%;overflow:hidden}
+  .app{
+    --pad:8px;
+    --gap:6px;
+    --ctrlH:50px;
+    --camH:42px;
+    --statusH:14px;
+    --stackH:50px;
+    --sideMin:168px;
+    --safeT:env(safe-area-inset-top,0px);
+    --safeB:env(safe-area-inset-bottom,0px);
+    --safeL:env(safe-area-inset-left,0px);
+    --safeR:env(safe-area-inset-right,0px);
+    /* Dial diameter: biggest square that still leaves room for the
+       bottom rows (height) and a usable side column (width). */
+    --D:min(
+      calc(100dvh - var(--safeT) - var(--safeB) - 2*var(--pad) - var(--ctrlH) - var(--camH) - var(--statusH) - 3*var(--gap)),
+      calc(100vw - var(--safeL) - var(--safeR) - 2*var(--pad) - var(--gap) - var(--sideMin)),
+      620px
+    );
+    width:100%;
+    max-width:calc(var(--D) + 360px + var(--gap) + 2*var(--pad));
+    height:100dvh;
+    min-height:0;
+    margin:0 auto;
+    overflow:hidden;
+    padding:calc(var(--pad) + var(--safeT)) calc(var(--pad) + var(--safeR)) calc(var(--pad) + var(--safeB)) calc(var(--pad) + var(--safeL));
+    display:grid;
+    grid-template-columns:var(--D) minmax(0,1fr) minmax(0,1fr);
+    grid-template-rows:calc(var(--D) - var(--stackH) - var(--gap)) var(--stackH) var(--ctrlH) var(--camH) var(--statusH);
+    grid-template-areas:
+      "dial   panel  panel"
+      "dial   stack  stack"
+      "ctrl   ctrl   ctrl"
+      "cam    random upload"
+      "status status status";
+    gap:var(--gap);
+    align-content:center;
+  }
+
+  .dialStage{grid-area:dial;width:var(--D);height:var(--D);margin:0;align-self:start}
+  .indexMarker{border-left-width:5px;border-right-width:5px;border-bottom-width:9px}
+
+  /* Brand + status share the bottom line: brand left, status centred. */
+  .header{grid-area:status;height:var(--statusH);min-height:0;display:block;justify-self:start;align-self:center;pointer-events:auto;z-index:1}
+  .header>div[aria-hidden]{display:none}
+  .brand{display:flex;align-items:baseline;gap:6px;line-height:var(--statusH);cursor:pointer}
+  .brand small{display:inline;font-size:9px;margin:0;letter-spacing:.08em}
+  .brand strong{font-size:11px;letter-spacing:.32em;padding-left:0}
+  .status{grid-area:status;min-height:0;height:var(--statusH);line-height:var(--statusH);font-size:10px;padding-left:72px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* Effect row: reset · effect pill · shutter, full width. */
+  .effectControlRow{grid-area:ctrl;grid-template-columns:var(--ctrlH) minmax(0,1fr) var(--ctrlH);gap:var(--gap);align-items:center}
+  .effectPill{height:calc(var(--ctrlH) - 8px);margin:0;width:100%;grid-template-columns:44px 1fr 44px}
+  .effectPill button{font-size:24px}
+  .effectName{font-size:12px}
+  .effectDots{font-size:8px;letter-spacing:3px;line-height:10px}
+  .rowAction{width:var(--ctrlH);height:var(--ctrlH)}
+  .resetAction{font-size:20px}
+  .shutterAction{border-width:5px}
+
+  /* Parameters: two-line rows — name/value, then − slider +. */
+  .panel{grid-area:panel;min-height:0;overflow-y:auto;border-radius:14px;display:flex;flex-direction:column;overscroll-behavior:contain}
+  .paramRow{
+    flex:1 1 auto;min-height:0;max-height:72px;padding:2px 8px;gap:0 4px;border-bottom-width:1px;
+    grid-template-columns:34px minmax(0,1fr) 34px;
+    grid-template-rows:12px 30px;
+    grid-template-areas:"label label value" "minus range plus";
+    align-items:center;
+  }
+  .paramRow>.paramText{grid-area:label}
+  .paramRow>.step[data-d="-1"]{grid-area:minus}
+  .paramRow>.range{grid-area:range}
+  .paramRow>.step[data-d="1"]{grid-area:plus}
+  .paramRow>.value{grid-area:value;text-align:right;font-size:11px;line-height:12px;color:rgba(255,255,255,.8)}
+  .paramText strong{font-size:10px;line-height:12px;font-weight:600;letter-spacing:.04em}
+  .paramText small{display:none}
+  .step{width:34px;height:30px;font-size:18px;border-radius:15px}
+  .range{height:30px;margin:0}
+
+  /* Stack: always three equal slots, no horizontal scrolling. */
+  .stackHeader{display:none}
+  .stack{grid-area:stack;height:var(--stackH);overflow:hidden;gap:var(--gap);min-height:0}
+  .card{flex:1 1 0;min-width:0;height:100%;padding:4px 5px;border-radius:10px;font-size:9px;line-height:1.2;overflow:hidden}
+  /* Narrow slot: number beside the delete button, full name on its own line. */
+  .card strong{font-size:9px;font-weight:600;margin:0;white-space:nowrap;letter-spacing:.02em}
+  .card .cardNum{display:block;height:18px;line-height:16px;color:var(--muted)}
+  .card{container-type:inline-size}
+  .card .cardName{display:block;overflow:hidden;text-overflow:ellipsis;letter-spacing:0;font-size:clamp(7px,14cqw,11px)}
+  .card .cardParams{display:none}
+  .card .cardContent{display:block;overflow:hidden}
+  .card.add{flex:1 1 0;min-width:0;font-size:20px}
+  .effectDelete{width:22px;height:22px;top:2px;right:2px;font-size:14px}
+  /* Bigger invisible hit area for the small delete button. */
+  .effectDelete::after{content:"";position:absolute;inset:-8px}
+
+  /* Bottom utility row. */
+  .cameraBar{grid-area:cam;padding:0;border:0;background:none;border-radius:0;gap:var(--gap)}
+  .utilityBar{grid-area:upload;padding:0;border:0;background:none;border-radius:0}
+  .cameraBar button,.cameraBar label,.utilityBar button,.utilityBar label{
+    min-height:0;height:var(--camH);border-radius:12px;border:1px solid var(--line);background:#14161b;
+    flex-direction:row;gap:6px;font-size:11px;
+  }
+  .randomStandalone{grid-area:random;height:var(--camH);min-height:0;border-radius:12px;font-size:11px;background:#14161b}
+}
+
+/* Very short viewports (Titan with keyboard-height chrome, split screen):
+   shrink row chrome before the dial gets tiny. */
+@media (min-aspect-ratio: 4/5) and (max-height:330px){
+  .app{--ctrlH:44px;--camH:36px;--statusH:12px;--gap:4px;--pad:5px}
+  .paramRow{padding:0 6px;grid-template-rows:12px 28px}
+  .step,.range{height:28px}.step{width:30px}
+  .paramRow{grid-template-columns:30px minmax(0,1fr) 30px}
+  .cameraBar button,.utilityBar label,.randomStandalone{font-size:10px;white-space:nowrap}
+}
+
+/* Taller square viewports (Titan in full screen / installed): the dial is
+   width-bound, so spend the spare height on larger touch targets. */
+@media (min-aspect-ratio: 4/5) and (min-height:420px) and (max-width:899px){
+  .app{--ctrlH:60px;--camH:52px;--statusH:18px;--gap:8px}
+  .effectName{font-size:13px}
+}
+
+/* Desktop development: wide windows keep the side column readable. */
+@media (min-aspect-ratio: 4/5) and (min-width:900px) and (min-height:600px){
+  .app{--stackH:64px;--sideMin:300px;--ctrlH:60px;--camH:48px;--statusH:18px;--gap:10px;--pad:16px}
+  .brand small{font-size:11px}.brand strong{font-size:13px}.status{font-size:12px}
+  .effectName{font-size:14px}
+  .paramText strong{font-size:13px;line-height:18px}.paramRow>.value{font-size:13px;line-height:18px}
+  .paramRow{grid-template-rows:18px 40px;padding:6px 12px}.step,.range{height:40px}.step{width:40px;border-radius:50%}
+  .paramRow{grid-template-columns:40px minmax(0,1fr) 40px}
+  .card strong{font-size:12px}.card{font-size:10px}
+  .card .cardParams{display:block;margin-top:2px;color:var(--muted)}
+}
 </style>
 </head>
 <body>
@@ -501,6 +655,10 @@ let dialPointerMoved = false;
 let shutterHoldTimer = null;
 let shutterHoldTriggered = false;
 let shutterPointerDown = false;
+let captured = false;            // shutter tapped: preview is a still under review
+const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const DIAL_DETENT_DEG = 20;      // one effect step = 20° of dial rotation (drag and buttons alike)
 
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const copyEffect=(e)=>({name:e.name,params:e.params.map(p=>({...p}))});
@@ -561,10 +719,21 @@ function resizePreview(){
 }
 
 function sourceSquare(size){
-  updateVideoSource();
+  // A fresh canvas per call: effects read from it and callers may keep it.
   const c=document.createElement('canvas');
   c.width=c.height=size;
   const cx=c.getContext('2d',{willReadFrequently:true});
+  const live=stream&&!frozen&&video.readyState>=2&&video.videoWidth&&video.videoHeight;
+  if(live){
+    // Crop the centre square straight from the video frame. Skips copying the
+    // whole camera frame into `source` on every preview frame.
+    const vw=video.videoWidth,vh=video.videoHeight,side=Math.min(vw,vh);
+    cx.save();
+    if(facingMode==='user'){cx.translate(size,0);cx.scale(-1,1)}
+    cx.drawImage(video,(vw-side)/2,(vh-side)/2,side,side,0,0,size,size);
+    cx.restore();
+    return c;
+  }
   const sw=source.width,sh=source.height,side=Math.min(sw,sh);
   cx.drawImage(source,(sw-side)/2,(sh-side)/2,side,side,0,0,size,size);
   return c;
@@ -891,7 +1060,12 @@ function render(){
   pctx.clearRect(0,0,preview.width,preview.height);
   pctx.imageSmoothingEnabled=false;
   pctx.drawImage(processed,0,0,preview.width,preview.height);
-  if(stream&&!frozen)requestAnimationFrame(requestRender);
+  if(stream&&!frozen){
+    // The Titan's panel runs at 120Hz but the camera delivers ~30fps.
+    // Only process when a new camera frame exists.
+    if(video.requestVideoFrameCallback)video.requestVideoFrameCallback(()=>requestRender());
+    else requestAnimationFrame(requestRender);
+  }
 }
 
 function requestRender(){
@@ -946,7 +1120,7 @@ function updateUI(){
     const content=document.createElement('button');
     content.className='cardContent';
     content.type='button';
-    content.innerHTML=`<strong>${i+1} ${e.name}</strong>${e.params.slice(0,3).map(p=>`${p.name[0]} ${p.value}`).join(' · ')}`;
+    content.innerHTML=`<strong><span class="cardNum">${i+1}</span> <span class="cardName">${e.name}</span></strong><span class="cardParams">${e.params.slice(0,3).map(p=>`${p.name[0]} ${p.value}`).join(' · ')}</span>`;
     content.onclick=()=>{
       selected=EFFECTS.findIndex(x=>x.name===e.name);
       EFFECTS[selected].params=e.params.map(p=>({...p}));
@@ -978,10 +1152,13 @@ function updateUI(){
   document.getElementById('stackCount').textContent=`(${stack.length}/3)`;
 }
 
-function selectEffect(delta){
+function selectEffect(delta,rotateDial=true){
   selected=(selected+delta+EFFECTS.length)%EFFECTS.length;
-  dialDegrees-=delta*(360/EFFECTS.length);
+  // Dragging already turned the ring; buttons turn it by one detent in the
+  // same direction a drag would.
+  if(rotateDial)dialDegrees+=delta*DIAL_DETENT_DEG;
   updateUI();
+  requestRender();
 }
 
 function addCurrentEffect(){
@@ -1035,7 +1212,8 @@ dialStage.addEventListener('pointerdown',e=>{
 dialStage.addEventListener('pointermove',e=>{
   if(!dragging || dialHoldTriggered)return;
 
-  const events=e.getCoalescedEvents?.() || [e];
+  const coalesced=e.getCoalescedEvents?.();
+  const events=coalesced&&coalesced.length?coalesced:[e];
   for(const ev of events){
     const a=pointAngle(ev);
     let d=angleDelta(a,lastAngle);
@@ -1056,11 +1234,12 @@ dialStage.addEventListener('pointermove',e=>{
     dialDegrees+=d*180/Math.PI;
     tickRing.style.transform=`rotate(${dialDegrees}deg)`;
 
-    const step=Math.PI/9;
+    const step=DIAL_DETENT_DEG*Math.PI/180;
     while(Math.abs(accumulated)>=step){
       const dir=accumulated>0?1:-1;
       accumulated-=dir*step;
-      selectEffect(dir);
+      selectEffect(dir,false);
+      try{navigator.vibrate?.(6)}catch(_){}
     }
   }
 });
@@ -1076,12 +1255,15 @@ async function startCamera(){
   try{
     stream?.getTracks().forEach(t=>t.stop());
     stream=await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:{ideal:facingMode},width:{ideal:1920},height:{ideal:1920}},
+      // 4:3 matches the sensor; 1200px short side is the most the export
+      // pipeline processes (processSize caps at 1200), so more is wasted work.
+      video:{facingMode:{ideal:facingMode},width:{ideal:1600},height:{ideal:1200},frameRate:{ideal:30,max:30}},
       audio:false
     });
     video.srcObject=stream;
     await video.play();
     frozen=false;
+    captured=false;
     setStatus('Camera active');
     requestRender();
   }catch(err){
@@ -1101,7 +1283,7 @@ fileInput.addEventListener('change',async()=>{
     source.width=bitmap.width;source.height=bitmap.height;
     sctx.clearRect(0,0,source.width,source.height);sctx.drawImage(bitmap,0,0);
     bitmap.close?.();
-    frozen=true;
+    frozen=true;captured=false;
     setStatus('Photo loaded');
     requestRender();
   }catch(err){
@@ -1109,7 +1291,7 @@ fileInput.addEventListener('change',async()=>{
     img.onload=()=>{
       source.width=img.naturalWidth;source.height=img.naturalHeight;
       sctx.drawImage(img,0,0);URL.revokeObjectURL(img.src);
-      frozen=true;setStatus('Photo loaded');requestRender();
+      frozen=true;captured=false;setStatus('Photo loaded');requestRender();
     };
     img.onerror=()=>setStatus('Could not open image');
     img.src=URL.createObjectURL(file);
@@ -1149,7 +1331,9 @@ async function saveImage(){
     const file=new File([blob],filename,{type:'image/png'});
 
     // On iPhone, Share is more reliable than an automatic file download.
-    if(navigator.canShare?.({files:[file]}) && navigator.share){
+    // Android (Titan) has no 'Save Image' in its share sheet; a download lands
+    // in Downloads and shows up in the gallery, so share only on iOS.
+    if(IS_IOS && navigator.canShare?.({files:[file]}) && navigator.share){
       await navigator.share({files:[file],title:'FK17 OKO'});
       setStatus(`Saved ${exportSize}×${exportSize}`);
       return;
@@ -1180,14 +1364,19 @@ async function toggleRecording(){
   }
   try{
     const cs=preview.captureStream(30);
-    const type=['video/mp4','video/webm;codecs=vp9','video/webm'].find(t=>MediaRecorder.isTypeSupported(t))||'';
-    recorder=new MediaRecorder(cs,type?{mimeType:type}:undefined);chunks=[];
+    // H.264 MP4 first: hardware-encoded on Android/iOS and plays in the gallery.
+    const type=['video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm']
+      .find(t=>MediaRecorder.isTypeSupported(t))||'';
+    const opts={videoBitsPerSecond:6_000_000};
+    if(type)opts.mimeType=type;
+    recorder=new MediaRecorder(cs,opts);chunks=[];
     recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
     recorder.onstop=()=>{
       const blob=new Blob(chunks,{type:recorder.mimeType||'video/webm'});
       const ext=blob.type.includes('mp4')?'mp4':'webm';
       const url=URL.createObjectURL(blob),a=document.createElement('a');
-      a.href=url;a.download=`fk17_oko_recording.${ext}`;a.click();
+      a.href=url;a.download=`fk17_oko_recording.${ext}`;
+      document.body.appendChild(a);a.click();a.remove();
       setTimeout(()=>URL.revokeObjectURL(url),2000);
       recording=false;
       setStatus('Recording saved');
@@ -1202,7 +1391,7 @@ document.getElementById('prevEffect').onclick=()=>selectEffect(-1);
 document.getElementById('nextEffect').onclick=()=>selectEffect(1);
 document.getElementById('randomButton').onclick=randomRecipe;
 document.getElementById('cameraButton').onclick=async()=>{
-  facingMode=facingMode==='user'?'environment':'user';
+  if(stream)facingMode=facingMode==='user'?'environment':'user';
   document.getElementById('cameraButton').innerHTML=`↺<span>${facingMode==='user'?'Front Camera':'Back Camera'}</span>`;
   await startCamera();
 };
@@ -1218,13 +1407,16 @@ async function beginHoldRecording(){
 
   if(!stream){
     await startCamera();
-    if(!stream){
+    if(!stream || !shutterPointerDown){
+      // Camera failed, or the shutter was released while it was starting:
+      // don't begin a recording nobody is holding.
       shutterHoldTriggered=false;
       return;
     }
   }
 
   frozen=false;
+  captured=false;
   await toggleRecording();
   shutter.classList.add('recording');
   setStatus('Recording — release shutter to stop');
@@ -1256,7 +1448,16 @@ shutter.addEventListener('pointerup',async e=>{
     return;
   }
 
+  // Second tap while reviewing a capture returns to the live camera.
+  if(captured){
+    captured=false;
+    if(stream){frozen=false;setStatus('Live');requestRender();}
+    else await startCamera();
+    return;
+  }
+
   // Short tap captures and displays the processed still. It does not save.
+  captured=true;
   if(stream){
     updateVideoSource();
     frozen=true;
@@ -1282,6 +1483,7 @@ function resetAllState(){
   selected=0;
   dialDegrees=0;
   frozen=false;
+  captured=false;
 
   EFFECTS.forEach((e,ei)=>e.params.forEach((p,pi)=>p.value=[
     [5,5,55],[7,50,0],[5,100],[8,25],[25,1],[100]
@@ -1295,12 +1497,49 @@ function resetAllState(){
 
 document.getElementById('resetButton').onclick=resetAllState;
 window.addEventListener('resize',resizePreview);
+if(window.ResizeObserver)new ResizeObserver(resizePreview).observe(preview);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)requestRender()});
+
+/* Physical keyboard guard (Titan 2 Elite QWERTY).
+   Buttons and sliders keep focus after a tap, so a stray Space/Enter would
+   re-fire Save/Random/Reset, and the keyboard's arrow keys and its
+   touch-scroll surface would nudge a focused slider. No camera control is
+   driven by the keyboard; keys are swallowed unless a modifier is held
+   (browser shortcuts still work). */
+const KEY_PASSTHROUGH=new Set(['Tab','Escape','F5','BrowserBack','GoBack','AudioVolumeUp','AudioVolumeDown','AudioVolumeMute']);
+function guardKey(e){
+  if(e.ctrlKey||e.metaKey||e.altKey)return;
+  if(KEY_PASSTHROUGH.has(e.key))return;
+  const t=e.target;
+  if(t&&(t.isContentEditable||(t.tagName==='INPUT'&&t.type!=='range'&&t.type!=='file')||t.tagName==='TEXTAREA'))return;
+  e.preventDefault();
+  e.stopPropagation();
+}
+window.addEventListener('keydown',guardKey,true);
+window.addEventListener('keyup',guardKey,true);
+window.addEventListener('keypress',guardKey,true);
+// Drop focus after touch/mouse so nothing stays "armed" for the keyboard.
+document.addEventListener('pointerup',e=>{
+  if(e.pointerType==='mouse'&&matchMedia('(any-pointer:fine)').matches&&!matchMedia('(pointer:coarse)').matches)return;
+  setTimeout(()=>{const a=document.activeElement;if(a&&a!==document.body&&a.blur)a.blur()},0);
+},true);
+// No long-press context menus on the dial or controls.
+document.addEventListener('contextmenu',e=>{if(e.target.closest('.dialStage,.effectControlRow,.stack,.panel'))e.preventDefault()});
+
+// Tap the FK17 OKO mark to go full screen (hides Chrome's toolbar and
+// status bar on Android: ~100px more height for the dial).
+document.querySelector('.brand').addEventListener('click',()=>{
+  const d=document;
+  if(d.fullscreenElement)d.exitFullscreen?.();
+  else d.documentElement.requestFullscreen?.({navigationUI:'hide'}).catch(()=>{});
+});
 
 buildTicks();
 makeDefault();
 updateUI();
 resizePreview();
+// A camera opens to its live view.
+if(window.isSecureContext&&navigator.mediaDevices?.getUserMedia)startCamera();
 </script>
 </body>
 </html>
